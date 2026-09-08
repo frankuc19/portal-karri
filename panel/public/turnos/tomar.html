@@ -14,6 +14,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .topbar-logo{background:#1c9996;color:#fff;font-size:12px;font-weight:600;padding:3px 10px;border-radius:6px}
 .topbar-title{color:#fff;font-size:14px;font-weight:500;flex:1}
 .topbar-user{color:rgba(255,255,255,0.6);font-size:12px}
+.btn-salir{background:none;border:none;color:rgba(255,255,255,0.55);font-size:12px;font-weight:600;cursor:pointer;padding:4px 2px;text-decoration:underline;text-underline-offset:2px}
+.btn-salir:hover{color:#fff}
 .tabs{display:flex;border-bottom:1px solid #e5e7eb;background:#fff}
 .tab{flex:1;text-align:center;padding:12px;font-size:13px;font-weight:600;color:#9ca3af;cursor:pointer;border-bottom:2px solid transparent}
 .tab.active{color:#1c9996;border-color:#1c9996}
@@ -89,6 +91,7 @@ input:focus{border-color:#1c9996;box-shadow:0 0 0 3px rgba(28,153,150,0.1)}
     <span class="topbar-logo">KARRI</span>
     <span class="topbar-title">Turnos</span>
     <span class="topbar-user" id="topbar-user"></span>
+    <button class="btn-salir hidden" id="btn-salir" onclick="cerrarSesion()">Salir</button>
   </div>
   <div class="tabs hidden" id="tabs">
     <div class="tab active" data-tab="tomar" onclick="switchTab('tomar')">Tomar turno</div>
@@ -269,8 +272,38 @@ async function continuarLogin() {
 function arrancarApp() {
   document.getElementById('tabs').classList.remove('hidden');
   document.getElementById('topbar-user').textContent = karrier.name;
+  document.getElementById('btn-salir').classList.remove('hidden');
   if (tiendaActual) { showPage('page-tomar'); cargarTurnos(); }
   else irATiendas();
+}
+
+// Cierra la sesión del Karrier actual (borra el RUT y la tienda guardados en
+// este navegador) para que otra persona pueda identificarse desde el mismo
+// celular sin que quede pegado el RUT anterior.
+function cerrarSesion() {
+  localStorage.removeItem('turnos_rut');
+  localStorage.removeItem('turnos_tienda');
+  rut = '';
+  karrier = null;
+  tiendaActual = null;
+  // Vuelve a la semana/día actual — si la persona anterior navegó a otra
+  // semana, la siguiente no debe heredar esa vista.
+  weekStart = mondayOf(new Date());
+  diaSeleccionado = new Date().toISOString().slice(0, 10);
+  slotSeleccionado = null;
+  slotsSemana = [];
+
+  document.getElementById('tabs').classList.add('hidden');
+  document.getElementById('btn-salir').classList.add('hidden');
+  document.getElementById('topbar-user').textContent = '';
+  document.getElementById('login-rut').value = '';
+  document.getElementById('login-name').value = '';
+  document.getElementById('login-phone').value = '';
+  document.getElementById('login-name-wrap').classList.add('hidden');
+  document.getElementById('login-noelegible').classList.add('hidden');
+  document.getElementById('btn-continuar-login').classList.remove('hidden');
+  document.getElementById('login-err').textContent = '';
+  showPage('page-login');
 }
 
 function irATiendas() {
