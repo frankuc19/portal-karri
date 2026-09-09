@@ -18,7 +18,7 @@ const SHIFT_TYPES = {
   AM:   { code: 'AM',   name: 'Mañana',   startTime: '08:00', endTime: '14:00' },
   PM:   { code: 'PM',   name: 'Tarde',    startTime: '14:00', endTime: '20:00' },
   FULL: { code: 'FULL', name: 'Jornada completa', startTime: '08:00', endTime: '20:00' },
-  CAPACITACION: { code: 'CAPACITACION', name: 'Capacitación', startTime: '09:00', endTime: '11:00' },
+  CAPACITACION: { code: 'CAPACITACION', name: 'Capacitación', startTime: '10:30', endTime: '11:30' },
 };
 
 // Tipos que participan en la planificación de cupos (Picker/Shopper/Driver) —
@@ -142,16 +142,30 @@ function ensureDir() {
   if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
 }
 
+// Cache en memoria de cada archivo — evita releer y re-parsear el mismo JSON
+// desde disco en cada llamada. Antes, calcular los cupos de un turno releía
+// el archivo completo de asignaciones una vez por rol (3x por turno), y eso
+// se multiplicaba por cada turno de cada tienda al listar disponibilidad —
+// de ahí la demora al cargar tiendas justo después de ingresar el RUT.
+// writeJson mantiene el caché al día, así que nunca queda desactualizado.
+const _jsonCache = new Map();
+
 function readJson(file, fallback) {
+  if (_jsonCache.has(file)) return _jsonCache.get(file);
   ensureDir();
-  if (!fs.existsSync(file)) return fallback;
-  try { return JSON.parse(fs.readFileSync(file, 'utf8')); }
-  catch { return fallback; }
+  let data = fallback;
+  if (fs.existsSync(file)) {
+    try { data = JSON.parse(fs.readFileSync(file, 'utf8')); }
+    catch { data = fallback; }
+  }
+  _jsonCache.set(file, data);
+  return data;
 }
 
 function writeJson(file, data) {
   ensureDir();
   fs.writeFileSync(file, JSON.stringify(data, null, 2));
+  _jsonCache.set(file, data);
 }
 
 // ─── Tiendas ──────────────────────────────────────────────────────────────────
@@ -225,7 +239,14 @@ function ensureKarrier(rut, name, phone) {
 }
 
 // ─── Slots (disponibilidad de turnos) ──────────────────────────────────────────
-function getSlots() { return readJson(SLOTS_FILE, []); }
+// El horario de Capacitación siempre se toma de SHIFT_TYPES (no de lo
+// guardado en el slot al crearlo) para que un cambio de horario aplique
+// también a los turnos de Capacitación ya creados, sin recrearlos uno a uno.
+function getSlots() {
+  return readJson(SLOTS_FILE, []).map(s => s.shiftType === 'CAPACITACION'
+    ? { ...s, startTime: SHIFT_TYPES.CAPACITACION.startTime, endTime: SHIFT_TYPES.CAPACITACION.endTime }
+    : s);
+}
 function getSlotById(id) { return getSlots().find(s => s.id === id) || null; }
 function saveSlot(slot) {
   const list = getSlots();
