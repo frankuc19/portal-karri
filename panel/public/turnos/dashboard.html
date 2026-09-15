@@ -45,6 +45,12 @@
       <select class="input" id="filtro-tienda" style="width:180px;" onchange="cargarTodo()">
         <option value="">Todas las tiendas</option>
       </select>
+      <select class="input" id="filtro-rol" style="width:150px;" onchange="cargarTodo()">
+        <option value="">Todos los roles</option>
+        <option value="Picker">Picker</option>
+        <option value="Shopper">Shopper</option>
+        <option value="Driver">Driver</option>
+      </select>
       <div class="week-nav">
         <button class="week-btn" onclick="cambiarSemana(-7)"><i data-lucide="chevron-left" style="width:14px;height:14px;"></i></button>
         <button class="btn-secondary" onclick="irHoy()">Hoy</button>
@@ -266,13 +272,19 @@ function renderGrafico() {
 
 async function cargarTodo() {
   const storeId = document.getElementById('filtro-tienda').value;
+  const role = document.getElementById('filtro-rol').value;
 
   const d = new Date(weekStart + 'T00:00:00');
   const fin = new Date(d); fin.setDate(fin.getDate() + 6);
   document.getElementById('rango-semana').textContent =
-    `Semana del ${d.getDate()}/${d.getMonth()+1} al ${fin.getDate()}/${fin.getMonth()+1}`;
+    `Semana del ${d.getDate()}/${d.getMonth()+1} al ${fin.getDate()}/${fin.getMonth()+1}` +
+    (role ? ` · Rol: ${role}` : '');
 
-  const kpis = await fetch(`/api/turnos/admin/dashboard?weekStart=${weekStart}`).then(x => x.json());
+  const params = new URLSearchParams({ weekStart });
+  if (storeId) params.set('storeId', storeId);
+  if (role) params.set('role', role);
+
+  const kpis = await fetch(`/api/turnos/admin/dashboard?${params}`).then(x => x.json());
   if (kpis.ok) {
     document.getElementById('kpi-karriers').textContent  = kpis.kpis.karriersActivos;
     document.getElementById('kpi-tomados').textContent   = kpis.kpis.turnosTomados;
@@ -281,8 +293,7 @@ async function cargarTodo() {
     document.getElementById('kpi-tiendas').textContent   = kpis.kpis.tiendasActivas;
   }
 
-  const url = `/api/turnos/admin/cobertura?weekStart=${weekStart}` + (storeId ? `&storeId=${storeId}` : '');
-  const cov = await fetch(url).then(x => x.json());
+  const cov = await fetch(`/api/turnos/admin/cobertura?${params}`).then(x => x.json());
   ultimasFilas = cov.ok ? cov.cobertura.filas : [];
   renderCobertura(ultimasFilas);
   renderGrafico();

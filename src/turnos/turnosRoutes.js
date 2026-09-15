@@ -443,15 +443,15 @@ adminRouter.delete('/karriers/:rut', (req, res) => {
 });
 
 adminRouter.get('/cobertura', (req, res) => {
-  const { weekStart, storeId } = req.query;
+  const { weekStart, storeId, role } = req.query;
   if (!weekStart) return res.status(400).json({ ok: false, error: 'Falta weekStart' });
-  res.json({ ok: true, cobertura: store.coberturaGeneral(weekStart, storeId || null) });
+  res.json({ ok: true, cobertura: store.coberturaGeneral(weekStart, storeId || null, role || null) });
 });
 
 adminRouter.get('/dashboard', (req, res) => {
-  const { weekStart } = req.query;
+  const { weekStart, storeId, role } = req.query;
   if (!weekStart) return res.status(400).json({ ok: false, error: 'Falta weekStart' });
-  res.json({ ok: true, kpis: store.dashboardKpis(weekStart) });
+  res.json({ ok: true, kpis: store.dashboardKpis(weekStart, storeId || null, role || null) });
 });
 
 adminRouter.get('/asignaciones', (req, res) => {

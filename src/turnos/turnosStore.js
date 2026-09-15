@@ -573,13 +573,25 @@ function coberturaTienda(storeId, weekStartDate) {
   return disponibilidadTienda(storeId, weekStartDate);
 }
 
-function coberturaGeneral(weekStartDate, storeIdFiltro) {
+// role (opcional, uno de ROLES) desglosa cupos/tomados/disponibles/cobertura
+// de cada fila usando solo ese rol (vía porRol) en vez del agregado de los 3.
+function coberturaGeneral(weekStartDate, storeIdFiltro, role) {
   const tiendas = getTiendas().filter(t => !storeIdFiltro || t.id === storeIdFiltro);
   const filas = [];
   for (const tienda of tiendas) {
     // Capacitación no tiene cupos y no debe sumar a la cobertura/planificación.
     const slots = disponibilidadTienda(tienda.id, weekStartDate).filter(s => s.shiftType !== 'CAPACITACION');
-    for (const s of slots) filas.push({ ...s, storeName: tienda.name });
+    for (const s of slots) {
+      const fila = { ...s, storeName: tienda.name };
+      if (role && s.porRol) {
+        const r = s.porRol[role] || { capacity: 0, taken: 0, available: 0 };
+        fila.capacity = r.capacity;
+        fila.taken = r.taken;
+        fila.available = r.available;
+        fila.coverage = r.capacity > 0 ? Math.round((r.taken / r.capacity) * 100) : 0;
+      }
+      filas.push(fila);
+    }
   }
   const totales = filas.reduce((acc, f) => {
     acc.requeridos += f.capacity;
@@ -591,11 +603,13 @@ function coberturaGeneral(weekStartDate, storeIdFiltro) {
   return { filas, totales: { ...totales, coberturaGlobal } };
 }
 
-function dashboardKpis(weekStartDate) {
-  const karriersActivos = getKarriers().filter(k => k.status === 'ACTIVE').length;
-  const asignacionesActivas = getAsignaciones().filter(a => a.status === 'ACTIVE').length;
-  const { totales } = coberturaGeneral(weekStartDate);
-  const tiendasActivas = getTiendas().filter(t => t.active).length;
+function dashboardKpis(weekStartDate, storeIdFiltro, role) {
+  const karriersActivos = getKarriers()
+    .filter(k => k.status === 'ACTIVE' && (!role || determinarRolKarrier(k.rut).rol === role)).length;
+  const asignacionesActivas = getAsignaciones()
+    .filter(a => a.status === 'ACTIVE' && (!role || a.role === role)).length;
+  const { totales } = coberturaGeneral(weekStartDate, storeIdFiltro, role);
+  const tiendasActivas = getTiendas().filter(t => t.active && (!storeIdFiltro || t.id === storeIdFiltro)).length;
   return {
     karriersActivos,
     turnosTomados: asignacionesActivas,
