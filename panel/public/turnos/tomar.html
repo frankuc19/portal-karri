@@ -41,6 +41,16 @@ input:focus{border-color:#1c9996;box-shadow:0 0 0 3px rgba(28,153,150,0.1)}
 .store-card .commune{font-size:12px;color:#6b7280;margin-top:2px}
 .store-card .avail{font-size:12px;color:#1c9996;margin-top:8px;font-weight:600}
 
+.brand-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
+.brand-card{border:1px solid #e5e7eb;border-radius:14px;padding:20px 12px;display:flex;flex-direction:column;align-items:center;gap:10px;cursor:pointer;transition:border-color .15s;text-align:center;background:#fff}
+.brand-card:hover{border-color:#1c9996}
+.brand-card .bicon{width:100%;height:56px;display:flex;align-items:center;justify-content:center}
+.brand-card .bicon img{max-width:100%;max-height:56px;object-fit:contain}
+.brand-card .bname{font-size:13.5px;font-weight:700;color:#1f3444}
+.brand-card .bcount{font-size:11.5px;color:#1c9996;font-weight:600}
+.back-link{display:flex;align-items:center;gap:4px;color:#1c9996;font-size:13px;font-weight:600;cursor:pointer;margin-bottom:14px}
+.back-link:hover{text-decoration:underline}
+
 .current-store{display:flex;align-items:center;justify-content:space-between;background:#f0fdfa;border:1px solid #99f6e4;border-radius:10px;padding:10px 14px;margin-bottom:16px}
 .current-store .name{font-size:13px;font-weight:700;color:#1f3444}
 .current-store button{background:none;border:none;color:#1c9996;font-size:12px;font-weight:600;cursor:pointer}
@@ -119,9 +129,17 @@ input:focus{border-color:#1c9996;box-shadow:0 0 0 3px rgba(28,153,150,0.1)}
     <button class="btn btn-primary" id="btn-continuar-login" onclick="continuarLogin()">Continuar</button>
   </div>
 
-  <!-- Selección de tienda -->
+  <!-- Selección de cliente (marca) -->
+  <div class="page" id="page-cliente">
+    <h2>¿Con qué cliente vas a trabajar?</h2>
+    <p class="sub">Elige el cliente para ver sus tiendas</p>
+    <div class="brand-grid" id="lista-clientes"></div>
+  </div>
+
+  <!-- Selección de tienda dentro del cliente elegido -->
   <div class="page" id="page-tienda">
-    <h2>¿Dónde quieres trabajar?</h2>
+    <div class="back-link" onclick="volverAClientes()">‹ Cambiar cliente</div>
+    <h2 id="cliente-titulo">Tiendas</h2>
     <p class="sub">Selecciona la tienda</p>
     <div id="lista-tiendas"></div>
   </div>
@@ -167,6 +185,21 @@ input:focus{border-color:#1c9996;box-shadow:0 0 0 3px rgba(28,153,150,0.1)}
 const DIAS_CORTO = ['DOM','LUN','MAR','MIÉ','JUE','VIE','SÁB'];
 const DIAS_LARGO = ['domingo','lunes','martes','miércoles','jueves','viernes','sábado'];
 const TURNO_LABEL = { AM: 'Mañana (AM)', PM: 'Tarde (PM)', FULL: 'Jornada completa', CAPACITACION: 'Capacitación' };
+
+// Clientes reconocidos a partir del nombre de la tienda (tolera variantes,
+// igual que la detección de rol por "Cliente" en Altas Onboarding). "Líder"
+// se agrupa junto a Walmart porque es su misma cadena en Chile.
+const CLIENTES = [
+  { key: 'walmart', name: 'Walmart', icon: 'https://res.cloudinary.com/dkkab5dea/image/upload/v1784908512/logo-lider-transparente_ut8rmx.png', match: ['walmart', 'lider', 'líder'] },
+  { key: 'tottus', name: 'Tottus', icon: 'https://res.cloudinary.com/dkkab5dea/image/upload/v1776046972/vvnhrti6semjuby3kig2.png', match: ['tottus'] },
+  { key: 'santaisabel', name: 'Santa Isabel', icon: 'https://res.cloudinary.com/dkkab5dea/image/upload/v1781209109/santa_isabel_sin_fondo_inryz8.png', match: ['santa isabel'] },
+  { key: 'falabella', name: 'Falabella', icon: 'https://res.cloudinary.com/dkkab5dea/image/upload/v1776300774/umv69rdlqimdr6st0jas.png', match: ['falabella'] },
+  { key: 'jumbo', name: 'Jumbo', icon: 'https://res.cloudinary.com/dkkab5dea/image/upload/v1776300774/umv69rdlqimdr6st0jas.png', match: ['jumbo'] },
+];
+function clienteDeTienda(nombre) {
+  const n = String(nombre || '').toLowerCase();
+  return CLIENTES.find(c => c.match.some(k => n.includes(k))) || null;
+}
 
 let rut = localStorage.getItem('turnos_rut') || '';
 let karrier = null;
@@ -306,24 +339,71 @@ function cerrarSesion() {
   showPage('page-login');
 }
 
+let tiendasTodas = [];
+let clienteSeleccionado = null;
+
 function irATiendas() {
-  showPage('page-tienda');
-  cargarTiendas();
+  showPage('page-cliente');
+  cargarClientes();
 }
 
-async function cargarTiendas() {
+async function cargarClientes() {
   const r = await fetch('/api/turnos/public/tiendas').then(x => x.json());
-  const cont = document.getElementById('lista-tiendas');
-  if (!r.ok || r.tiendas.length === 0) {
+  tiendasTodas = r.ok ? r.tiendas : [];
+  renderClientes();
+}
+
+function renderClientes() {
+  const cont = document.getElementById('lista-clientes');
+  if (tiendasTodas.length === 0) {
     cont.innerHTML = '<div class="empty">No hay tiendas disponibles por ahora.</div>';
     return;
   }
-  cont.innerHTML = r.tiendas.map(t => `
-    <div class="store-card" onclick='seleccionarTienda(${JSON.stringify(t)})'>
-      <div class="name">${t.name}</div>
-      <div class="commune">${t.commune || ''}</div>
-      <div class="avail">${t.turnosDisponibles} turnos disponibles</div>
+  const grupos = CLIENTES.map(c => ({
+    ...c,
+    tiendas: tiendasTodas.filter(t => clienteDeTienda(t.name)?.key === c.key),
+  })).filter(g => g.tiendas.length > 0);
+
+  const sinCliente = tiendasTodas.filter(t => !clienteDeTienda(t.name));
+  if (sinCliente.length > 0) {
+    grupos.push({ key: '_otras', name: 'Otras tiendas', icon: null, tiendas: sinCliente });
+  }
+
+  if (grupos.length === 0) {
+    cont.innerHTML = '<div class="empty">No hay tiendas disponibles por ahora.</div>';
+    return;
+  }
+  cont.innerHTML = grupos.map(g => `
+    <div class="brand-card" onclick="seleccionarCliente('${g.key}')">
+      <div class="bicon">${g.icon ? `<img src="${g.icon}" alt="${g.name}">` : `<div class="name" style="font-size:22px;">🏬</div>`}</div>
+      <div class="bname">${g.name}</div>
+      <div class="bcount">${g.tiendas.length} tienda${g.tiendas.length === 1 ? '' : 's'}</div>
     </div>`).join('');
+}
+
+function seleccionarCliente(key) {
+  clienteSeleccionado = key;
+  const grupo = key === '_otras'
+    ? { name: 'Otras tiendas', tiendas: tiendasTodas.filter(t => !clienteDeTienda(t.name)) }
+    : (() => { const c = CLIENTES.find(c => c.key === key); return { name: c.name, tiendas: tiendasTodas.filter(t => clienteDeTienda(t.name)?.key === key) }; })();
+
+  document.getElementById('cliente-titulo').textContent = grupo.name;
+  const cont = document.getElementById('lista-tiendas');
+  if (grupo.tiendas.length === 0) {
+    cont.innerHTML = '<div class="empty">No hay tiendas disponibles para este cliente.</div>';
+  } else {
+    cont.innerHTML = grupo.tiendas.map(t => `
+      <div class="store-card" onclick='seleccionarTienda(${JSON.stringify(t)})'>
+        <div class="name">${t.name}</div>
+        <div class="commune">${t.commune || ''}</div>
+        <div class="avail">${t.turnosDisponibles} turnos disponibles</div>
+      </div>`).join('');
+  }
+  showPage('page-tienda');
+}
+
+function volverAClientes() {
+  showPage('page-cliente');
 }
 
 function seleccionarTienda(t) {
