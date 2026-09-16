@@ -62,13 +62,24 @@
 
     <!-- Mapeo código de tienda -> Sala -->
     <div class="card" style="overflow:hidden;">
-      <div style="padding:16px 20px;border-bottom:1px solid rgba(15,23,22,.07);">
-        <p style="font-size:13px;font-weight:600;color:var(--text);">Código de tienda Cencosud → Sala</p>
-        <p style="font-size:11px;color:var(--text-muted);margin-top:2px;">Cada pedido llega con un código interno de tienda que hay que traducir a Sala antes de resolver la tarifa. Agrega uno nuevo si Cenco habilita una tienda que no aparece aquí.</p>
+      <div id="codigos-tienda-header" onclick="toggleCodigosTienda()" style="padding:16px 20px;display:flex;align-items:center;justify-content:space-between;gap:12px;cursor:pointer;">
+        <div>
+          <p style="font-size:13px;font-weight:600;color:var(--text);display:flex;align-items:center;gap:6px;">
+            <i data-lucide="chevron-right" id="codigos-tienda-chevron" style="width:14px;height:14px;transition:transform .15s;"></i>
+            Código de tienda Cencosud → Sala
+            <span id="codigos-tienda-resumen" style="font-weight:400;color:var(--text-muted);"></span>
+          </p>
+          <p style="font-size:11px;color:var(--text-muted);margin-top:2px;margin-left:20px;">Cada pedido llega con un código interno de tienda que hay que traducir a Sala antes de resolver la tarifa.</p>
+        </div>
       </div>
-      <div style="padding:16px 20px;">
-        <div id="codigos-tienda-config" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px 16px;"></div>
-        <div style="display:flex;gap:8px;margin-top:12px;align-items:center;">
+      <div id="codigos-tienda-body" class="hidden" style="padding:0 20px 16px;border-top:1px solid rgba(15,23,22,.07);">
+        <div class="tbl-wrap" style="margin-top:16px;">
+          <table>
+            <thead><tr><th>Código de tienda</th><th>Sala asignada</th></tr></thead>
+            <tbody id="codigos-tienda-config"></tbody>
+          </table>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:12px;align-items:center;flex-wrap:wrap;">
           <input class="input" id="nuevo-codigo" placeholder="Código nuevo (ej. J999)" style="width:180px;">
           <select class="input" id="nuevo-codigo-sala" style="width:180px;"></select>
           <button class="btn-secondary" onclick="agregarCodigoTienda()">
@@ -214,33 +225,51 @@ async function cargarCodigosTienda() {
   renderCodigosTiendaConfig();
 }
 
+let codigosTiendaAbierto = false;
+
+function toggleCodigosTienda() {
+  codigosTiendaAbierto = !codigosTiendaAbierto;
+  document.getElementById('codigos-tienda-body').classList.toggle('hidden', !codigosTiendaAbierto);
+  document.getElementById('codigos-tienda-chevron').style.transform = codigosTiendaAbierto ? 'rotate(90deg)' : 'rotate(0deg)';
+}
+
 function renderCodigosTiendaConfig() {
   const cont = document.getElementById('codigos-tienda-config');
   const entradas = Object.entries(codigosTienda).sort((a, b) => a[0].localeCompare(b[0]));
+  const resumenEl = document.getElementById('codigos-tienda-resumen');
 
   if (salasConocidas.length === 0) {
-    cont.innerHTML = `<div style="grid-column:1/-1;" class="import-result warn">
-      Todavía no hay ninguna Sala conocida porque no se han importado los polígonos en
-      <a href="/operaciones/tarifario.html" style="font-weight:700;text-decoration:underline;">Tarifario → Cenco</a>.
-      Importa ahí el archivo de polígonos (y el de tarifas) antes de procesar un período — sin eso, ningún
-      pedido va a poder cruzarse contra un polígono y todos saldrán "Fuera de polígonos".
-    </div>`;
+    resumenEl.textContent = '— sin polígonos importados';
+    cont.innerHTML = `<tr><td colspan="2">
+      <div class="import-result warn" style="margin:8px 0;">
+        Todavía no hay ninguna Sala conocida porque no se han importado los polígonos en
+        <a href="/operaciones/tarifario.html" style="font-weight:700;text-decoration:underline;">Tarifario → Cenco</a>.
+        Importa ahí el archivo de polígonos (y el de tarifas) antes de procesar un período — sin eso, ningún
+        pedido va a poder cruzarse contra un polígono y todos saldrán "Fuera de polígonos".
+      </div>
+    </td></tr>`;
+    if (window.lucide) lucide.createIcons({ el: cont });
     return;
   }
+
+  resumenEl.textContent = `(${entradas.length} código${entradas.length === 1 ? '' : 's'})`;
+
   if (entradas.length === 0) {
-    cont.innerHTML = '<p style="font-size:12px;color:var(--text-faint);">Sin códigos configurados todavía.</p>';
+    cont.innerHTML = '<tr><td colspan="2" style="text-align:center;color:var(--text-faint);padding:20px;">Sin códigos configurados todavía.</td></tr>';
     return;
   }
   cont.innerHTML = entradas.map(([codigo, sala]) => {
     const salaValida = salasConocidas.includes(sala);
     return `
-    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);">
-      <span class="td-mono" style="font-size:12.5px;">${codigo}</span>
-      <select class="sala-select" onchange="asignarCodigoTienda('${codigo}', this.value)">
-        ${!salaValida && sala ? `<option value="${sala}" selected>${sala} (sin polígonos)</option>` : ''}
-        ${salasConocidas.map(s => `<option value="${s}" ${s === sala ? 'selected' : ''}>${s}</option>`).join('')}
-      </select>
-    </div>`;
+    <tr>
+      <td class="td-mono">${codigo}</td>
+      <td>
+        <select class="sala-select" onchange="asignarCodigoTienda('${codigo}', this.value)">
+          ${!salaValida && sala ? `<option value="${sala}" selected>${sala} (sin polígonos)</option>` : ''}
+          ${salasConocidas.map(s => `<option value="${s}" ${s === sala ? 'selected' : ''}>${s}</option>`).join('')}
+        </select>
+      </td>
+    </tr>`;
   }).join('');
 }
 
