@@ -26,6 +26,20 @@ router.post('/zonas/importar', upload.single('file'), (req, res) => {
   res.json({ ok: true, ...resultado });
 });
 
+// Crear/eliminar una geocerca dibujada a mano en el mapa (sin pasar por Excel)
+router.post('/zonas', (req, res) => {
+  const { sala, nombre, rings, observacion } = req.body || {};
+  const resultado = store.crearZona({ sala, nombre, rings, observacion });
+  if (resultado.error) return res.status(400).json({ ok: false, error: resultado.error });
+  res.json({ ok: true, zona: resultado.zona });
+});
+
+router.delete('/zonas/:id', (req, res) => {
+  const eliminada = store.eliminarZona(req.params.id);
+  if (!eliminada) return res.status(404).json({ ok: false, error: 'Zona no encontrada' });
+  res.json({ ok: true });
+});
+
 // ─── Mapa Grupo de polígono → Sala ──────────────────────────────────────────
 router.get('/salas', (_req, res) => {
   res.json({ ok: true, mapa: store.getMapaSalas() });

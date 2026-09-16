@@ -234,6 +234,50 @@ function importarPoligonos(rows) {
   };
 }
 
+// Grupo fijo para toda zona dibujada a mano en el mapa (en vez de venir de un
+// "Poligono" del Excel) — así queda claramente distinguible en la tabla y en
+// el filtro del mapa, sin depender del mapa Grupo→Sala (la Sala se elige
+// directo al crearla).
+const GRUPO_MANUAL = 'Manual';
+
+// Crea una zona nueva sin pasar por una importación de Excel — para agregar
+// una geocerca puntual dibujada en el mapa. `rings` ya viene en el mismo
+// formato que produce parseWKT: array de anillos, cada uno un array de
+// [lng, lat].
+function crearZona({ sala, nombre, rings, observacion }) {
+  sala = String(sala || '').trim();
+  nombre = String(nombre || '').trim();
+  if (!sala) return { error: 'Falta la Sala' };
+  if (!nombre) return { error: 'Falta el nombre de la zona' };
+  if (!Array.isArray(rings) || rings.length === 0 || !Array.isArray(rings[0]) || rings[0].length < 3) {
+    return { error: 'El polígono necesita al menos 3 vértices' };
+  }
+
+  const nombreNorm = normalizar(nombre);
+  const zonas = getZonas();
+  if (zonas.some(z => z.sala === sala && z.nombreNorm === nombreNorm)) {
+    return { error: `Ya existe una zona "${nombre}" para la Sala "${sala}".` };
+  }
+
+  const zona = {
+    id: crypto.randomUUID(), grupo: GRUPO_MANUAL, sala, nombre, nombreNorm,
+    rings, observacion: observacion || '',
+  };
+  zonas.push(zona);
+  writeJson(ZONAS_FILE, zonas);
+  reconciliarNombres();
+  return { zona };
+}
+
+function eliminarZona(id) {
+  const zonas = getZonas();
+  const idx = zonas.findIndex(z => z.id === id);
+  if (idx < 0) return false;
+  zonas.splice(idx, 1);
+  writeJson(ZONAS_FILE, zonas);
+  return true;
+}
+
 // ─── Tarifas por zona + Asegurados por sala ────────────────────────────────
 const DIA_ASEGURADO = 'Asegurado';
 function esDiaDomingoFestivo(dias) {
@@ -452,7 +496,7 @@ module.exports = {
   parseWKT, puntoEnPoligono, normalizar,
   getMapaSalas, setSalaDeGrupo,
   getMapaCodigosTienda, setCodigoTienda,
-  getZonas, importarPoligonos,
+  getZonas, importarPoligonos, crearZona, eliminarZona,
   getTarifas, getAsegurados, importarTarifas, actualizarTarifa, crearTarifa, eliminarTarifa,
   resolverTarifa,
   getNombresCanonicos, reconciliarNombres,

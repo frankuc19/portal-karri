@@ -8,6 +8,8 @@
 <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
 <link href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" rel="stylesheet">
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<link href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css" rel="stylesheet">
+<script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/styles.css">
 <style>
@@ -221,6 +223,9 @@
           <option value="">Todas las geocercas</option>
         </select>
         <button class="btn-ghost" onclick="limpiarFiltrosMapa()"><i data-lucide="x" style="width:13px;height:13px;"></i> Limpiar filtros</button>
+        <button class="btn-secondary" id="btn-dibujar-geocerca" onclick="iniciarDibujoGeocerca()">
+          <i data-lucide="pencil" style="width:13px;height:13px;"></i> Dibujar geocerca nueva
+        </button>
         <span style="flex:1;"></span>
         <span style="font-size:11.5px;color:var(--text-muted);">Buscar coordenada:</span>
         <input class="input" id="mapa-buscar-lat" style="width:100px;" placeholder="Latitud">
@@ -370,6 +375,64 @@
       <button class="btn-ghost" onclick="closeHistorial()"><i data-lucide="x" style="width:15px;height:15px;"></i></button>
     </div>
     <div class="modal-body" id="historial-body" style="padding:16px 20px;"></div>
+  </div>
+</div>
+
+<!-- ====================================================
+     MODAL GEOCERCA NUEVA (dibujada a mano en el mapa)
+===================================================== -->
+<div id="modal-geocerca" class="modal-bg" style="display:none;" onclick="if(event.target===this)cancelarGeocercaNueva()">
+  <div class="modal" style="max-width:460px;">
+    <div class="modal-header">
+      <div>
+        <div style="font-size:15px;font-weight:700;">Nueva geocerca</div>
+        <div style="font-size:12px;color:var(--text-muted);margin-top:2px;">Dibujada a mano en el mapa</div>
+      </div>
+      <button class="btn-ghost" onclick="cancelarGeocercaNueva()"><i data-lucide="x" style="width:15px;height:15px;"></i></button>
+    </div>
+    <div class="modal-body">
+      <div class="form-section">Identificación</div>
+      <div class="form-row" style="margin-bottom:14px;">
+        <div class="form-group">
+          <label class="label">Nombre de la zona</label>
+          <input class="input" id="geo-nombre" placeholder="ej. Villa Nueva">
+        </div>
+        <div class="form-group">
+          <label class="label">Sala</label>
+          <select class="input" id="geo-sala"></select>
+        </div>
+      </div>
+
+      <div class="form-section">Tarifa (opcional)</div>
+      <p style="font-size:11px;color:var(--text-muted);margin:-6px 0 12px;">Puedes dejarlo en blanco y agregar la tarifa después desde "Tarifas por zona".</p>
+      <div class="form-row" style="margin-bottom:14px;">
+        <div class="form-group">
+          <label class="label">Lunes a Sábado</label>
+          <input class="input" type="number" min="0" id="geo-lunsab" placeholder="3050">
+        </div>
+        <div class="form-group">
+          <label class="label">Domingo y Festivos</label>
+          <input class="input" type="number" min="0" id="geo-domfest" placeholder="3150">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="label">Vigencia desde</label>
+          <input class="input" type="date" id="geo-vigencia-inicio">
+        </div>
+        <div class="form-group">
+          <label class="label">Vigencia hasta (vacío = indeterminado)</label>
+          <input class="input" type="date" id="geo-vigencia-fin">
+        </div>
+      </div>
+      <div id="geo-mensaje" class="hidden"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-secondary" onclick="cancelarGeocercaNueva()">Cancelar</button>
+      <button class="btn-primary" onclick="guardarGeocercaNueva()">
+        <i data-lucide="save" style="width:13px;height:13px;"></i> Guardar geocerca
+      </button>
+    </div>
   </div>
 </div>
 
@@ -685,10 +748,17 @@ async function initCenco() {
     maxZoom: 18,
   }).addTo(mapaCenco);
   mapaCenco.on('click', (e) => {
+    if (dibujandoGeocerca) return;
     document.getElementById('prueba-lat').value = e.latlng.lat.toFixed(6);
     document.getElementById('prueba-lng').value = e.latlng.lng.toFixed(6);
     document.getElementById('mapa-buscar-lat').value = e.latlng.lat.toFixed(6);
     document.getElementById('mapa-buscar-lng').value = e.latlng.lng.toFixed(6);
+  });
+  mapaCenco.on(L.Draw.Event.CREATED, (e) => {
+    capaGeocercaTemp = e.layer;
+    capaGeocercaTemp.addTo(mapaCenco);
+    finalizarModoDibujo();
+    abrirModalGeocerca();
   });
   await cargarCenco();
 }
@@ -805,7 +875,8 @@ function renderMapaCenco() {
       const info = tarifa
         ? `ID ${tarifa.id} · L-S: $${Number(tarifa.lunSab||0).toLocaleString('es-CL')} · Dom/Fest: $${Number(tarifa.domFestivo||0).toLocaleString('es-CL')}${tarifa.fueraDeVigencia ? ' <span style="color:#dc2626;">(fuera de vigencia)</span>' : ''}`
         : '<span style="color:#dc2626;">Sin tarifa configurada</span>';
-      poly.bindPopup(`<b>${z.nombre}</b><br>Polígono: ${z.grupo}<br>Sala: ${sala || '<i>sin asignar</i>'}<br>${info}`);
+      const borrar = z.grupo === 'Manual' ? `<br><a href="#" onclick="eliminarZonaCenco('${z.id}');return false;" style="color:#dc2626;">Eliminar geocerca</a>` : '';
+      poly.bindPopup(`<b>${z.nombre}</b><br>Polígono: ${z.grupo}<br>Sala: ${sala || '<i>sin asignar</i>'}<br>${info}${borrar}`);
       capasZonas.push(poly);
       latlngs.forEach(ll => bounds.push(ll));
     }
@@ -852,6 +923,110 @@ function buscarCoordenadaEnMapa() {
     : 'sin tarifa configurada';
   marcadorBusqueda.bindPopup(`<b>${zona.nombre}</b><br>Polígono: ${zona.grupo}<br>Sala: ${zona.sala || 'sin asignar'}<br>${infoTarifa}`).openPopup();
   out.innerHTML = `Cae en <b>${zona.nombre}</b> (Sala: ${zona.sala || 'sin asignar'}, Polígono: ${zona.grupo}) — ${infoTarifa}.`;
+}
+
+// ─── Dibujar una geocerca nueva a mano (sin subir Excel) ───────────────────
+// Usa Leaflet.draw para capturar los vértices con clicks sobre el mapa; al
+// cerrar el polígono se abre un modal para ponerle nombre, Sala y
+// (opcionalmente) su tarifa, antes de guardarlo.
+let dibujandoGeocerca = false;
+let capaGeocercaTemp = null;
+let controlDibujo = null;
+
+function iniciarDibujoGeocerca() {
+  if (dibujandoGeocerca) return;
+  dibujandoGeocerca = true;
+  document.getElementById('btn-dibujar-geocerca').disabled = true;
+  document.getElementById('mapa-buscar-resultado').textContent = 'Modo dibujo activo: haz click en el mapa para ir marcando los vértices de la geocerca, y doble click (o click en el primer punto) para cerrarla.';
+
+  controlDibujo = new L.Draw.Polygon(mapaCenco, {
+    shapeOptions: { color: '#1c9996', weight: 2, fillOpacity: 0.15 },
+    showArea: false,
+  });
+  controlDibujo.enable();
+}
+
+function finalizarModoDibujo() {
+  dibujandoGeocerca = false;
+  document.getElementById('btn-dibujar-geocerca').disabled = false;
+  document.getElementById('mapa-buscar-resultado').textContent = '';
+}
+
+function abrirModalGeocerca() {
+  document.getElementById('geo-nombre').value = '';
+  document.getElementById('geo-lunsab').value = '';
+  document.getElementById('geo-domfest').value = '';
+  document.getElementById('geo-vigencia-inicio').value = '';
+  document.getElementById('geo-vigencia-fin').value = '';
+  document.getElementById('geo-mensaje').classList.add('hidden');
+  const selSala = document.getElementById('geo-sala');
+  selSala.innerHTML = salasConocidas().map(s => `<option value="${s}">${s}</option>`).join('');
+  document.getElementById('modal-geocerca').style.display = 'flex';
+  if (window.lucide) lucide.createIcons();
+}
+
+function cancelarGeocercaNueva() {
+  if (capaGeocercaTemp) { mapaCenco.removeLayer(capaGeocercaTemp); capaGeocercaTemp = null; }
+  document.getElementById('modal-geocerca').style.display = 'none';
+}
+
+async function guardarGeocercaNueva() {
+  const nombre = document.getElementById('geo-nombre').value.trim();
+  const sala = document.getElementById('geo-sala').value;
+  const msj = document.getElementById('geo-mensaje');
+  msj.classList.add('hidden');
+
+  if (!nombre || !sala || !capaGeocercaTemp) {
+    msj.classList.remove('hidden'); msj.className = 'import-result warn';
+    msj.textContent = 'Falta el nombre o la Sala.';
+    return;
+  }
+
+  // Leaflet entrega [{lat,lng}, ...] — nuestro formato interno es [lng,lat],
+  // el mismo que produce parseWKT al leer un Excel.
+  const latlngs = capaGeocercaTemp.getLatLngs()[0];
+  const ring = latlngs.map(p => [p.lng, p.lat]);
+
+  const rZona = await fetch('/api/tarifario/cenco/zonas', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ sala, nombre, rings: [ring] }),
+  }).then(x => x.json());
+
+  if (!rZona.ok) {
+    msj.classList.remove('hidden'); msj.className = 'import-result warn';
+    msj.textContent = rZona.error || 'No se pudo guardar la geocerca.';
+    return;
+  }
+
+  const lunSab = document.getElementById('geo-lunsab').value;
+  const domFestivo = document.getElementById('geo-domfest').value;
+  if (lunSab !== '' || domFestivo !== '') {
+    const rTarifa = await fetch('/api/tarifario/cenco/tarifas', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        sala, destino: nombre,
+        lunSab: lunSab === '' ? null : Number(lunSab),
+        domFestivo: domFestivo === '' ? null : Number(domFestivo),
+        vigenciaInicio: document.getElementById('geo-vigencia-inicio').value || null,
+        vigenciaFin: document.getElementById('geo-vigencia-fin').value || null,
+      }),
+    }).then(x => x.json());
+    if (!rTarifa.ok) {
+      // La zona ya se guardó igual — solo avisa que la tarifa quedó pendiente.
+      alert('La geocerca se guardó, pero la tarifa no: ' + (rTarifa.error || 'error desconocido') + '\nPuedes agregarla después desde "Tarifas por zona".');
+    }
+  }
+
+  capaGeocercaTemp = null;
+  document.getElementById('modal-geocerca').style.display = 'none';
+  cargarCenco();
+}
+
+async function eliminarZonaCenco(id) {
+  if (!confirm('¿Eliminar esta geocerca? Esta acción no se puede deshacer.')) return;
+  const r = await fetch(`/api/tarifario/cenco/zonas/${id}`, { method: 'DELETE' }).then(x => x.json());
+  if (!r.ok) { alert(r.error || 'No se pudo eliminar'); return; }
+  cargarCenco();
 }
 
 // Tabla expandible por Sala — mismo patrón que la tabla de cobertura del
