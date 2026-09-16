@@ -230,16 +230,45 @@ function numeroDeId(id) {
 function getTarifas() { return readJson(TARIFAS_FILE, []); }
 function getAsegurados() { return readJson(ASEGURADOS_FILE, []); }
 
-// Actualiza (no reemplaza) el set de tarifas: una tarifa que ya existía para
-// esa Sala+Destino conserva su ID y su vigencia configurada a mano — solo se
-// actualizan los montos. Una combinación nueva recibe un ID nuevo. Los
+// ─── Vigencia ───────────────────────────────────────────────────────────────
+// Una zona puede tener más de una tarifa a la vez (ej. temporada alta vs.
+// normal), siempre que sus rangos de vigencia no se toquen. null en
+// vigenciaInicio/vigenciaFin significa "sin límite" en ese extremo.
+function estaVigente(t, fecha) {
+  return (!t.vigenciaInicio || t.vigenciaInicio <= fecha) && (!t.vigenciaFin || t.vigenciaFin >= fecha);
+}
+function seSuperponen(aIni, aFin, bIni, bFin) {
+  const aI = aIni || '0000-01-01', aF = aFin || '9999-12-31';
+  const bI = bIni || '0000-01-01', bF = bFin || '9999-12-31';
+  return aI <= bF && bI <= aF;
+}
+function buscarSolapamiento(sala, destinoNorm, vigenciaInicio, vigenciaFin, idExcluir) {
+  return getTarifas().find(t =>
+    t.id !== idExcluir && t.sala === sala && t.destinoNorm === destinoNorm &&
+    seSuperponen(vigenciaInicio, vigenciaFin, t.vigenciaInicio, t.vigenciaFin));
+}
+
+// Actualiza (no reemplaza) el set de tarifas. Una fila del Excel actualiza la
+// tarifa de esa Sala+Destino que esté vigente hoy (o la única que exista, si
+// todavía no hay historial); no toca otras tarifas de la misma zona con
+// vigencia pasada o futura ya configuradas a mano. Si no hay ninguna vigente
+// hoy y ya existe más de una para esa zona, crea una tarifa nueva desde hoy
+// en vez de arriesgarse a pisar una tarifa futura ya programada. Los
 // Asegurados sí se reemplazan completos (no tienen vigencia ni edición manual).
 function importarTarifas(rows) {
-  const existentes = new Map(getTarifas().map(t => [`${t.sala}|||${t.destinoNorm}`, t]));
-  const porDestino = new Map(); // "sala|||destinoNorm" -> registro
+  const previas = getTarifas();
+  const porId = new Map(previas.map(t => [t.id, t]));
+  const existentesPorClave = new Map(); // "sala|||destinoNorm" -> [tarifas previas]
+  for (const t of previas) {
+    const key = `${t.sala}|||${t.destinoNorm}`;
+    if (!existentesPorClave.has(key)) existentesPorClave.set(key, []);
+    existentesPorClave.get(key).push(t);
+  }
+  const resueltasEnEstaCorrida = new Map(); // key -> id (para que Lun-Sáb y Dom/Fest, en filas separadas, caigan en la misma tarifa)
   const porAsegurado = new Map(); // sala -> registro
   const errores = [];
-  let siguienteNumero = Math.max(0, ...[...existentes.values()].map(t => numeroDeId(t.id))) + 1;
+  let siguienteNumero = Math.max(0, ...previas.map(t => numeroDeId(t.id))) + 1;
+  const hoy = new Date().toISOString().slice(0, 10);
 
   rows.forEach((row, i) => {
     const fila = i + 2;
@@ -259,40 +288,99 @@ function importarTarifas(rows) {
     }
 
     const key = `${sala}|||${normalizar(destino)}`;
-    let reg = porDestino.get(key);
-    if (!reg) {
-      const previo = existentes.get(key);
+    let reg;
+    const idYaResuelto = resueltasEnEstaCorrida.get(key);
+    if (idYaResuelto) {
+      reg = porId.get(idYaResuelto);
+    } else {
+      const candidatas = existentesPorClave.get(key) || [];
+      let previo = candidatas.find(t => estaVigente(t, hoy));
+      if (!previo && candidatas.length === 1) previo = candidatas[0];
       reg = previo
         ? { ...previo, destino } // conserva id + vigencia + montos previos, refresca el texto del destino
         : {
             id: generarIdTarifa(siguienteNumero++), sala, destino, destinoNorm: normalizar(destino),
             lunSab: null, domFestivo: null, vigenciaInicio: null, vigenciaFin: null,
           };
-      porDestino.set(key, reg);
+      resueltasEnEstaCorrida.set(key, reg.id);
+      porId.set(reg.id, reg);
     }
     if (esDomFestivo) reg.domFestivo = monto; else reg.lunSab = monto;
   });
 
-  const tarifas = [...porDestino.values()];
+  const tarifas = [...porId.values()];
   const asegurados = [...porAsegurado.values()];
   writeJson(TARIFAS_FILE, tarifas);
   writeJson(ASEGURADOS_FILE, asegurados);
 
   reconciliarNombres();
 
-  return { zonasConTarifa: tarifas.length, salasConAsegurado: asegurados.length, filasLeidas: rows.length, errores };
+  return { zonasConTarifa: resueltasEnEstaCorrida.size, salasConAsegurado: asegurados.length, filasLeidas: rows.length, errores };
 }
 
 function actualizarTarifa(id, { lunSab, domFestivo, vigenciaInicio, vigenciaFin }) {
   const tarifas = getTarifas();
   const idx = tarifas.findIndex(t => t.id === id);
-  if (idx < 0) return null;
-  if (lunSab !== undefined) tarifas[idx].lunSab = lunSab === null ? null : Number(lunSab);
-  if (domFestivo !== undefined) tarifas[idx].domFestivo = domFestivo === null ? null : Number(domFestivo);
-  if (vigenciaInicio !== undefined) tarifas[idx].vigenciaInicio = vigenciaInicio || null;
-  if (vigenciaFin !== undefined) tarifas[idx].vigenciaFin = vigenciaFin || null; // vacío = indeterminado
+  if (idx < 0) return { error: 'Tarifa no encontrada', noEncontrada: true };
+  const actual = tarifas[idx];
+
+  if (vigenciaInicio !== undefined || vigenciaFin !== undefined) {
+    const nuevaInicio = vigenciaInicio !== undefined ? (vigenciaInicio || null) : actual.vigenciaInicio;
+    const nuevaFin = vigenciaFin !== undefined ? (vigenciaFin || null) : actual.vigenciaFin;
+    const choque = buscarSolapamiento(actual.sala, actual.destinoNorm, nuevaInicio, nuevaFin, id);
+    if (choque) {
+      return { error: `La vigencia se superpone con la tarifa ${choque.id} (${choque.vigenciaInicio || 'sin inicio'} → ${choque.vigenciaFin || 'indeterminado'})` };
+    }
+    actual.vigenciaInicio = nuevaInicio;
+    actual.vigenciaFin = nuevaFin;
+  }
+  if (lunSab !== undefined) actual.lunSab = lunSab === null ? null : Number(lunSab);
+  if (domFestivo !== undefined) actual.domFestivo = domFestivo === null ? null : Number(domFestivo);
   writeJson(TARIFAS_FILE, tarifas);
-  return tarifas[idx];
+  return { tarifa: actual };
+}
+
+// Crea una tarifa adicional para una zona que ya tiene al menos un polígono
+// cargado, con su propio rango de vigencia — para casos como "temporada alta
+// desde el 1 de diciembre hasta el 28 de febrero" sin perder la tarifa normal
+// que rige el resto del año.
+function crearTarifa({ sala, destino, lunSab, domFestivo, vigenciaInicio, vigenciaFin }) {
+  sala = String(sala || '').trim();
+  destino = String(destino || '').trim();
+  if (!sala || !destino) return { error: 'Falta Sala o Destino' };
+  const destinoNorm = normalizar(destino);
+  if (!getZonas().some(z => z.sala === sala && z.nombreNorm === destinoNorm)) {
+    return { error: `No existe una zona "${destino}" para la sala "${sala}"` };
+  }
+
+  const inicio = vigenciaInicio || null;
+  const fin = vigenciaFin || null;
+  const choque = buscarSolapamiento(sala, destinoNorm, inicio, fin, null);
+  if (choque) {
+    return { error: `La vigencia se superpone con la tarifa ${choque.id} (${choque.vigenciaInicio || 'sin inicio'} → ${choque.vigenciaFin || 'indeterminado'})` };
+  }
+
+  const tarifas = getTarifas();
+  const siguienteNumero = Math.max(0, ...tarifas.map(t => numeroDeId(t.id))) + 1;
+  const nombreCanon = getNombresCanonicos()[destinoNorm] || destino;
+  const nueva = {
+    id: generarIdTarifa(siguienteNumero), sala, destino: nombreCanon, destinoNorm,
+    lunSab: lunSab === undefined || lunSab === null || lunSab === '' ? null : Number(lunSab),
+    domFestivo: domFestivo === undefined || domFestivo === null || domFestivo === '' ? null : Number(domFestivo),
+    vigenciaInicio: inicio, vigenciaFin: fin,
+  };
+  tarifas.push(nueva);
+  writeJson(TARIFAS_FILE, tarifas);
+  return { tarifa: nueva };
+}
+
+function eliminarTarifa(id) {
+  const tarifas = getTarifas();
+  const idx = tarifas.findIndex(t => t.id === id);
+  if (idx < 0) return false;
+  tarifas.splice(idx, 1);
+  writeJson(TARIFAS_FILE, tarifas);
+  return true;
 }
 
 // ─── Resolución de tarifa por punto (lat/lng) ──────────────────────────────
@@ -323,19 +411,17 @@ function resolverTarifa({ sala, lat, lng, fecha, esDomFestivo }) {
     };
   }
 
-  const tarifaExistente = getTarifas().find(t => t.sala === sala && t.destinoNorm === zona.nombreNorm);
-  const vigente = tarifaExistente
-    && (!tarifaExistente.vigenciaInicio || tarifaExistente.vigenciaInicio <= fechaConsulta)
-    && (!tarifaExistente.vigenciaFin || tarifaExistente.vigenciaFin >= fechaConsulta);
+  const candidatas = getTarifas().filter(t => t.sala === sala && t.destinoNorm === zona.nombreNorm);
+  const tarifaVigente = candidatas.find(t => estaVigente(t, fechaConsulta));
 
   let motivo = null;
-  if (!tarifaExistente) motivo = 'ZONA_SIN_TARIFA_CONFIGURADA';
-  else if (!vigente) motivo = 'TARIFA_FUERA_DE_VIGENCIA';
+  if (candidatas.length === 0) motivo = 'ZONA_SIN_TARIFA_CONFIGURADA';
+  else if (!tarifaVigente) motivo = 'TARIFA_FUERA_DE_VIGENCIA';
 
   return {
-    ok: true, sala, zona: zona.nombre, zonaId: zona.id, tarifaId: tarifaExistente?.id || null,
+    ok: true, sala, zona: zona.nombre, zonaId: zona.id, tarifaId: tarifaVigente?.id || null,
     dentroDePoligono: true, esDomFestivo: domFestivo,
-    monto: vigente ? (domFestivo ? tarifaExistente.domFestivo : tarifaExistente.lunSab) : null,
+    monto: tarifaVigente ? (domFestivo ? tarifaVigente.domFestivo : tarifaVigente.lunSab) : null,
     motivo,
   };
 }
@@ -344,7 +430,7 @@ module.exports = {
   parseWKT, puntoEnPoligono, normalizar,
   getMapaSalas, setSalaDeGrupo,
   getZonas, importarPoligonos,
-  getTarifas, getAsegurados, importarTarifas, actualizarTarifa,
+  getTarifas, getAsegurados, importarTarifas, actualizarTarifa, crearTarifa, eliminarTarifa,
   resolverTarifa,
   getNombresCanonicos, reconciliarNombres,
 };

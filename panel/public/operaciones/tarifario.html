@@ -254,7 +254,7 @@
         <div class="tbl-wrap" style="margin-top:16px;">
           <table>
             <thead><tr>
-              <th>ID</th><th>Zona / Destino</th><th>Lunes a Sábado</th><th>Domingo y Festivos</th><th>Vigencia</th><th>Polígono</th>
+              <th>ID</th><th>Zona / Destino</th><th>Lunes a Sábado</th><th>Domingo y Festivos</th><th>Vigencia</th><th>Polígono</th><th></th>
             </tr></thead>
             <tbody id="tbody-cenco-tarifas"></tbody>
           </table>
@@ -772,6 +772,18 @@ function limpiarFiltrosMapa() {
   renderMapaCenco();
 }
 
+// Una zona puede tener varias vigencias configuradas (ej. temporada alta) —
+// para mostrar algo útil en el mapa/búsqueda se prioriza la que está vigente
+// hoy, y si no hay ninguna vigente se muestra la más reciente igual, avisando
+// que está fuera de vigencia.
+function tarifaParaMostrar(sala, destinoNorm) {
+  const hoy = new Date().toISOString().slice(0, 10);
+  const candidatas = cencoTarifas.filter(t => t.sala === sala && t.destinoNorm === destinoNorm);
+  if (candidatas.length === 0) return null;
+  const vigente = candidatas.find(t => (!t.vigenciaInicio || t.vigenciaInicio <= hoy) && (!t.vigenciaFin || t.vigenciaFin >= hoy));
+  return vigente || { ...candidatas[0], fueraDeVigencia: true };
+}
+
 function renderMapaCenco() {
   capasZonas.forEach(l => mapaCenco.removeLayer(l));
   capasZonas = [];
@@ -786,12 +798,12 @@ function renderMapaCenco() {
   for (const z of zonasFiltradas) {
     const sala = z.sala || cencoMapaSalas[z.grupo] || null;
     const color = colorDeSala(sala);
-    const tarifa = cencoTarifas.find(t => t.sala === sala && t.destinoNorm === z.nombreNorm);
+    const tarifa = tarifaParaMostrar(sala, z.nombreNorm);
     for (const ring of z.rings) {
       const latlngs = ring.map(([lng, lat]) => [lat, lng]);
       const poly = L.polygon(latlngs, { color, weight: 1.5, fillOpacity: 0.25 }).addTo(mapaCenco);
       const info = tarifa
-        ? `ID ${tarifa.id} · L-S: $${Number(tarifa.lunSab||0).toLocaleString('es-CL')} · Dom/Fest: $${Number(tarifa.domFestivo||0).toLocaleString('es-CL')}`
+        ? `ID ${tarifa.id} · L-S: $${Number(tarifa.lunSab||0).toLocaleString('es-CL')} · Dom/Fest: $${Number(tarifa.domFestivo||0).toLocaleString('es-CL')}${tarifa.fueraDeVigencia ? ' <span style="color:#dc2626;">(fuera de vigencia)</span>' : ''}`
         : '<span style="color:#dc2626;">Sin tarifa configurada</span>';
       poly.bindPopup(`<b>${z.nombre}</b><br>Polígono: ${z.grupo}<br>Sala: ${sala || '<i>sin asignar</i>'}<br>${info}`);
       capasZonas.push(poly);
@@ -834,9 +846,9 @@ function buscarCoordenadaEnMapa() {
     out.textContent = 'No cae dentro de ningún polígono cargado.';
     return;
   }
-  const tarifa = cencoTarifas.find(t => t.sala === zona.sala && t.destinoNorm === zona.nombreNorm);
+  const tarifa = tarifaParaMostrar(zona.sala, zona.nombreNorm);
   const infoTarifa = tarifa
-    ? `ID ${tarifa.id} · L-S: ${pesos(tarifa.lunSab||0)} · Dom/Fest: ${pesos(tarifa.domFestivo||0)}`
+    ? `ID ${tarifa.id} · L-S: ${pesos(tarifa.lunSab||0)} · Dom/Fest: ${pesos(tarifa.domFestivo||0)}${tarifa.fueraDeVigencia ? ' (fuera de vigencia)' : ''}`
     : 'sin tarifa configurada';
   marcadorBusqueda.bindPopup(`<b>${zona.nombre}</b><br>Polígono: ${zona.grupo}<br>Sala: ${zona.sala || 'sin asignar'}<br>${infoTarifa}`).openPopup();
   out.innerHTML = `Cae en <b>${zona.nombre}</b> (Sala: ${zona.sala || 'sin asignar'}, Polígono: ${zona.grupo}) — ${infoTarifa}.`;
@@ -852,48 +864,98 @@ function toggleSalaTarifa(sala) {
   renderCencoTarifas();
 }
 
+// Una zona puede tener más de una tarifa vigente en distintas fechas (ej.
+// temporada alta). Se agrupan por destino dentro de cada Sala y se listan
+// todas sus vigencias una debajo de otra, con opción de agregar una vigencia
+// nueva o eliminar una que ya no corresponda.
+let formNuevaVigencia = null; // "sala|||destinoNorm" del destino con el formulario de alta abierto, o null
+
 function renderCencoTarifas() {
   const tbody = document.getElementById('tbody-cenco-tarifas');
   if (cencoTarifas.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;color:var(--text-faint);padding:24px;">Importa el archivo de tarifas para ver esta tabla.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--text-faint);padding:24px;">Importa el archivo de tarifas para ver esta tabla.</td></tr>`;
     return;
   }
   const zonaPorSalaDestino = new Map(cencoZonas.map(z => [`${z.sala}|||${z.nombreNorm}`, z]));
-  const grupos = new Map();
+  const grupos = new Map(); // sala -> [tarifas]
   for (const t of cencoTarifas) {
     if (!grupos.has(t.sala)) grupos.set(t.sala, []);
     grupos.get(t.sala).push(t);
   }
 
-  tbody.innerHTML = [...grupos.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([sala, filas]) => {
+  tbody.innerHTML = [...grupos.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([sala, filasSala]) => {
     const abierta = salasTarifaAbiertas.has(sala);
     const salaEsc = sala.replace(/'/g, "\\'");
-    const filasHtml = filas.sort((a, b) => a.destino.localeCompare(b.destino)).map(t => {
-      const zona = zonaPorSalaDestino.get(`${t.sala}|||${t.destinoNorm}`);
-      return `
-      <tr>
-        <td class="td-mono" style="padding-left:30px;color:var(--electric);font-size:11px;">${t.id}</td>
-        <td>${t.destino}</td>
-        <td><input class="cap-input" style="width:90px;" type="number" min="0" value="${t.lunSab ?? ''}" onchange="editarTarifaCenco('${t.id}','lunSab',this.value)"></td>
-        <td><input class="cap-input" style="width:90px;" type="number" min="0" value="${t.domFestivo ?? ''}" onchange="editarTarifaCenco('${t.id}','domFestivo',this.value)"></td>
-        <td>
-          <div style="display:flex;gap:4px;align-items:center;">
-            <input type="date" class="cap-input" style="width:128px;" value="${t.vigenciaInicio || ''}" onchange="editarTarifaCenco('${t.id}','vigenciaInicio',this.value)" title="Fecha inicio">
-            <span style="color:var(--text-faint);">→</span>
-            <input type="date" class="cap-input" style="width:128px;" value="${t.vigenciaFin || ''}" onchange="editarTarifaCenco('${t.id}','vigenciaFin',this.value)" title="Fecha fin (vacío = indeterminado)">
-          </div>
-        </td>
-        <td style="color:var(--text-muted);font-size:11px;">${zona ? zona.grupo : '<span style="color:#dc2626;">sin polígono</span>'}</td>
-      </tr>`;
-    }).join('');
+    const zonasDelSala = new Set(filasSala.map(t => t.destinoNorm)).size;
+
+    const porDestino = new Map(); // destinoNorm -> [tarifas]
+    for (const t of filasSala) {
+      if (!porDestino.has(t.destinoNorm)) porDestino.set(t.destinoNorm, []);
+      porDestino.get(t.destinoNorm).push(t);
+    }
+
+    const destinosHtml = [...porDestino.entries()]
+      .sort((a, b) => a[1][0].destino.localeCompare(b[1][0].destino))
+      .map(([destinoNorm, vigencias]) => {
+        const destino = vigencias[0].destino;
+        const zona = zonaPorSalaDestino.get(`${sala}|||${destinoNorm}`);
+        const destinoKey = `${sala}|||${destinoNorm}`;
+        const destinoKeyEsc = destinoKey.replace(/'/g, "\\'");
+
+        const vigenciasHtml = vigencias
+          .sort((a, b) => (a.vigenciaInicio || '').localeCompare(b.vigenciaInicio || ''))
+          .map(t => `
+          <tr>
+            <td class="td-mono" style="padding-left:30px;color:var(--electric);font-size:11px;">${t.id}</td>
+            <td style="color:var(--text-muted);font-size:12px;">${destino}</td>
+            <td><input class="cap-input" style="width:90px;" type="number" min="0" value="${t.lunSab ?? ''}" onchange="editarTarifaCenco('${t.id}','lunSab',this.value)"></td>
+            <td><input class="cap-input" style="width:90px;" type="number" min="0" value="${t.domFestivo ?? ''}" onchange="editarTarifaCenco('${t.id}','domFestivo',this.value)"></td>
+            <td>
+              <div style="display:flex;gap:4px;align-items:center;">
+                <input type="date" class="cap-input" style="width:128px;" value="${t.vigenciaInicio || ''}" onchange="editarTarifaCenco('${t.id}','vigenciaInicio',this.value)" title="Fecha inicio">
+                <span style="color:var(--text-faint);">→</span>
+                <input type="date" class="cap-input" style="width:128px;" value="${t.vigenciaFin || ''}" onchange="editarTarifaCenco('${t.id}','vigenciaFin',this.value)" title="Fecha fin (vacío = indeterminado)">
+              </div>
+            </td>
+            <td style="color:var(--text-muted);font-size:11px;">${zona ? zona.grupo : '<span style="color:#dc2626;">sin polígono</span>'}</td>
+            <td><button class="btn-danger-ghost" title="Eliminar esta vigencia" onclick="eliminarTarifaCenco('${t.id}')"><i data-lucide="trash-2" style="width:13px;height:13px;"></i></button></td>
+          </tr>`).join('');
+
+        const formHtml = formNuevaVigencia === destinoKey ? `
+          <tr>
+            <td></td>
+            <td colspan="6" style="padding:8px 6px;background:rgba(28,153,150,.05);border-radius:6px;">
+              <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+                <input id="nv-lunsab-${destinoKeyEsc}" class="cap-input" style="width:90px;" type="number" min="0" placeholder="L-S">
+                <input id="nv-domfest-${destinoKeyEsc}" class="cap-input" style="width:90px;" type="number" min="0" placeholder="Dom/Fest">
+                <input id="nv-inicio-${destinoKeyEsc}" class="cap-input" style="width:128px;" type="date" title="Fecha inicio">
+                <span style="color:var(--text-faint);">→</span>
+                <input id="nv-fin-${destinoKeyEsc}" class="cap-input" style="width:128px;" type="date" title="Fecha fin (vacío = indeterminado)">
+                <button class="btn-primary" style="padding:4px 10px;font-size:11px;" onclick="guardarNuevaVigencia('${salaEsc}','${destinoKeyEsc}')">Guardar</button>
+                <button class="btn-secondary" style="padding:4px 10px;font-size:11px;" onclick="formNuevaVigencia=null;renderCencoTarifas();">Cancelar</button>
+              </div>
+            </td>
+          </tr>` : '';
+
+        return `
+        <tr class="fila-zona" onclick="formNuevaVigencia = formNuevaVigencia === '${destinoKeyEsc}' ? null : '${destinoKeyEsc}'; renderCencoTarifas();" style="cursor:pointer;background:rgba(15,23,22,.02);">
+          <td colspan="6" style="padding-left:18px;font-size:12px;font-weight:500;">
+            ${destino} <span style="color:var(--text-faint);font-weight:400;">(${vigencias.length} vigencia${vigencias.length === 1 ? '' : 's'})</span>
+          </td>
+          <td style="font-size:11px;color:var(--electric);">+ vigencia</td>
+        </tr>
+        ${vigenciasHtml}
+        ${formHtml}`;
+      }).join('');
+
     return `
     <tr class="fila-tienda" onclick="toggleSalaTarifa('${salaEsc}')" style="cursor:pointer;">
-      <td colspan="6" style="font-weight:600;">
+      <td colspan="7" style="font-weight:600;">
         <i data-lucide="chevron-right" style="width:13px;height:13px;display:inline-block;vertical-align:middle;margin-right:6px;transition:transform .15s;${abierta ? 'transform:rotate(90deg);' : ''}"></i>
-        ${sala} <span style="color:var(--text-muted);font-weight:400;">(${filas.length} zona${filas.length === 1 ? '' : 's'})</span>
+        ${sala} <span style="color:var(--text-muted);font-weight:400;">(${zonasDelSala} zona${zonasDelSala === 1 ? '' : 's'})</span>
       </td>
     </tr>
-    ${abierta ? filasHtml : ''}`;
+    ${abierta ? destinosHtml : ''}`;
   }).join('');
   lucide.createIcons({ el: tbody });
 }
@@ -901,9 +963,42 @@ function renderCencoTarifas() {
 async function editarTarifaCenco(id, campo, valor) {
   const esFecha = campo === 'vigenciaInicio' || campo === 'vigenciaFin';
   const cuerpo = { [campo]: valor === '' ? null : (esFecha ? valor : Number(valor)) };
-  await fetch(`/api/tarifario/cenco/tarifas/${id}`, {
+  const r = await fetch(`/api/tarifario/cenco/tarifas/${id}`, {
     method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(cuerpo),
   }).then(x => x.json());
+  if (!r.ok) { alert(r.error || 'No se pudo actualizar la tarifa'); }
+  cargarCenco();
+}
+
+async function guardarNuevaVigencia(sala, destinoKey) {
+  const destinoKeyEsc = destinoKey.replace(/'/g, "\\'");
+  const t = cencoTarifas.find(x => `${x.sala}|||${x.destinoNorm}` === destinoKey);
+  const destino = t ? t.destino : '';
+  const lunSab = document.getElementById(`nv-lunsab-${destinoKeyEsc}`).value;
+  const domFestivo = document.getElementById(`nv-domfest-${destinoKeyEsc}`).value;
+  const vigenciaInicio = document.getElementById(`nv-inicio-${destinoKeyEsc}`).value;
+  const vigenciaFin = document.getElementById(`nv-fin-${destinoKeyEsc}`).value;
+
+  const r = await fetch('/api/tarifario/cenco/tarifas', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      sala, destino,
+      lunSab: lunSab === '' ? null : Number(lunSab),
+      domFestivo: domFestivo === '' ? null : Number(domFestivo),
+      vigenciaInicio: vigenciaInicio || null,
+      vigenciaFin: vigenciaFin || null,
+    }),
+  }).then(x => x.json());
+
+  if (!r.ok) { alert(r.error || 'No se pudo crear la vigencia'); return; }
+  formNuevaVigencia = null;
+  cargarCenco();
+}
+
+async function eliminarTarifaCenco(id) {
+  if (!confirm('¿Eliminar esta vigencia de tarifa? Esta acción no se puede deshacer.')) return;
+  const r = await fetch(`/api/tarifario/cenco/tarifas/${id}`, { method: 'DELETE' }).then(x => x.json());
+  if (!r.ok) { alert(r.error || 'No se pudo eliminar'); return; }
   cargarCenco();
 }
 

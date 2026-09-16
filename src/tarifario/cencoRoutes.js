@@ -51,11 +51,24 @@ router.post('/tarifas/importar', upload.single('file'), (req, res) => {
   res.json({ ok: true, ...resultado });
 });
 
+router.post('/tarifas', (req, res) => {
+  const { sala, destino, lunSab, domFestivo, vigenciaInicio, vigenciaFin } = req.body || {};
+  const resultado = store.crearTarifa({ sala, destino, lunSab, domFestivo, vigenciaInicio, vigenciaFin });
+  if (resultado.error) return res.status(400).json({ ok: false, error: resultado.error });
+  res.json({ ok: true, tarifa: resultado.tarifa });
+});
+
 router.put('/tarifas/:id', (req, res) => {
   const { lunSab, domFestivo, vigenciaInicio, vigenciaFin } = req.body || {};
-  const tarifa = store.actualizarTarifa(req.params.id, { lunSab, domFestivo, vigenciaInicio, vigenciaFin });
-  if (!tarifa) return res.status(404).json({ ok: false, error: 'Tarifa no encontrada' });
-  res.json({ ok: true, tarifa });
+  const resultado = store.actualizarTarifa(req.params.id, { lunSab, domFestivo, vigenciaInicio, vigenciaFin });
+  if (resultado.error) return res.status(resultado.noEncontrada ? 404 : 400).json({ ok: false, error: resultado.error });
+  res.json({ ok: true, tarifa: resultado.tarifa });
+});
+
+router.delete('/tarifas/:id', (req, res) => {
+  const eliminada = store.eliminarTarifa(req.params.id);
+  if (!eliminada) return res.status(404).json({ ok: false, error: 'Tarifa no encontrada' });
+  res.json({ ok: true });
 });
 
 // ─── Resolución de tarifa por punto (prueba de despacho) ───────────────────
