@@ -232,7 +232,17 @@ async function eliminar(id, nombre) {
   cargar();
 }
 
-initSidebar('tu-tiendas').then(async () => { lucide.createIcons(); await cargar(); });
+async function cargarPerfil() {
+  const r = await fetch('/api/me').then(x => x.json()).catch(() => null);
+  if (r?.role === 'beginner') {
+    document.querySelectorAll('[id^="f-cap-"]').forEach(el => {
+      el.disabled = true;
+      el.title = 'Tu perfil no puede modificar cupos';
+    });
+  }
+}
+
+initSidebar('tu-tiendas').then(async () => { lucide.createIcons(); await cargarPerfil(); await cargar(); });
 </script>
 </body>
 </html>

@@ -167,7 +167,8 @@ function requireAuth(req, res, next) {
 }
 
 function requireAuthApi(req, res, next) {
-  if (getSession(req)) return next();
+  const session = getSession(req);
+  if (session) { req.session = session; return next(); }
   res.status(401).json({ ok: false, error: 'No autenticado' });
 }
 

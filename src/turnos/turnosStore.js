@@ -508,16 +508,23 @@ function slotConInfo(slot) {
   };
 }
 
+// Turnos de una tienda dentro de un rango de fechas explícito (ambos
+// extremos incluidos) — base para la vista por semana, por día específico
+// o por rango elegido a mano.
+function slotsEnRango(storeId, dateFrom, dateTo) {
+  return getSlots()
+    .filter(s => s.storeId === storeId && s.date >= dateFrom && s.date <= dateTo)
+    .map(slotConInfo)
+    .sort((a, b) => (a.date + a.shiftType).localeCompare(b.date + b.shiftType));
+}
+
 function disponibilidadTienda(storeId, weekStartDate) {
   const weekEnd = (() => {
     const d = new Date(weekStartDate + 'T00:00:00');
     d.setDate(d.getDate() + 6);
     return d.toISOString().slice(0, 10);
   })();
-  return getSlots()
-    .filter(s => s.storeId === storeId && s.date >= weekStartDate && s.date <= weekEnd)
-    .map(slotConInfo)
-    .sort((a, b) => (a.date + a.shiftType).localeCompare(b.date + b.shiftType));
+  return slotsEnRango(storeId, weekStartDate, weekEnd);
 }
 
 // Todos los turnos de una tienda desde hoy en adelante, sin acotar a una
@@ -575,12 +582,12 @@ function coberturaTienda(storeId, weekStartDate) {
 
 // role (opcional, uno de ROLES) desglosa cupos/tomados/disponibles/cobertura
 // de cada fila usando solo ese rol (vía porRol) en vez del agregado de los 3.
-function coberturaGeneral(weekStartDate, storeIdFiltro, role) {
+function coberturaGeneral(dateFrom, dateTo, storeIdFiltro, role) {
   const tiendas = getTiendas().filter(t => !storeIdFiltro || t.id === storeIdFiltro);
   const filas = [];
   for (const tienda of tiendas) {
     // Capacitación no tiene cupos y no debe sumar a la cobertura/planificación.
-    const slots = disponibilidadTienda(tienda.id, weekStartDate).filter(s => s.shiftType !== 'CAPACITACION');
+    const slots = slotsEnRango(tienda.id, dateFrom, dateTo).filter(s => s.shiftType !== 'CAPACITACION');
     for (const s of slots) {
       const fila = { ...s, storeName: tienda.name };
       if (role && s.porRol) {
@@ -603,12 +610,12 @@ function coberturaGeneral(weekStartDate, storeIdFiltro, role) {
   return { filas, totales: { ...totales, coberturaGlobal } };
 }
 
-function dashboardKpis(weekStartDate, storeIdFiltro, role) {
+function dashboardKpis(dateFrom, dateTo, storeIdFiltro, role) {
   const karriersActivos = getKarriers()
     .filter(k => k.status === 'ACTIVE' && (!role || determinarRolKarrier(k.rut).rol === role)).length;
   const asignacionesActivas = getAsignaciones()
     .filter(a => a.status === 'ACTIVE' && (!role || a.role === role)).length;
-  const { totales } = coberturaGeneral(weekStartDate, storeIdFiltro, role);
+  const { totales } = coberturaGeneral(dateFrom, dateTo, storeIdFiltro, role);
   const tiendasActivas = getTiendas().filter(t => t.active && (!storeIdFiltro || t.id === storeIdFiltro)).length;
   return {
     karriersActivos,

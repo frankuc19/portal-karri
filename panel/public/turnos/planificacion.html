@@ -117,7 +117,7 @@
         <p style="font-size:11.5px;color:var(--text-muted);margin-bottom:8px;">Descarga la plantilla del rango elegido, edita los cupos de Picker/Shopper/Driver que quieras, y vuelve a subirla.</p>
         <div style="display:flex;gap:8px;">
           <button class="btn-secondary" style="flex:1;justify-content:center;" onclick="descargarPlantilla()"><i data-lucide="file-down" style="width:13px;height:13px;"></i> Descargar plantilla</button>
-          <button class="btn-secondary" style="flex:1;justify-content:center;" onclick="document.getElementById('input-cargar-cupos').click()"><i data-lucide="file-up" style="width:13px;height:13px;"></i> Cargar cupos</button>
+          <button class="btn-secondary" id="btn-cargar-cupos" style="flex:1;justify-content:center;" onclick="document.getElementById('input-cargar-cupos').click()"><i data-lucide="file-up" style="width:13px;height:13px;"></i> Cargar cupos</button>
           <input type="file" id="input-cargar-cupos" accept=".xlsx,.xls" style="display:none" onchange="cargarCuposExcel(this)">
         </div>
         <p id="carga-cupos-resultado" class="hidden" style="font-size:12px;margin-top:8px;"></p>
@@ -157,6 +157,16 @@ const DIAS = ['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábad
 const TURNO_LABEL = { AM:'AM', PM:'PM', FULL:'FULL' };
 let weekStart = mondayOf(new Date());
 let tiendas = [];
+let esBeginner = false; // perfil "beginner": puede ver Planificación, no editar cupos
+
+async function cargarPerfil() {
+  const r = await fetch('/api/me').then(x => x.json()).catch(() => null);
+  esBeginner = r?.role === 'beginner';
+  if (esBeginner) {
+    const btnCargar = document.getElementById('btn-cargar-cupos');
+    if (btnCargar) { btnCargar.disabled = true; btnCargar.title = 'Tu perfil no puede modificar cupos'; }
+  }
+}
 
 function mondayOf(d) {
   const day = d.getDay();
@@ -326,7 +336,7 @@ async function cargar() {
       <td>${TURNO_LABEL[s.shiftType]}</td>
       <td>${s.startTime}–${s.endTime}</td>
       ${ROLES.map(rol => `
-        <td style="border-left:1px solid rgba(15,23,22,.07);"><input class="cap-input" type="number" min="0" value="${s.porRol[rol].capacity}" onchange="actualizarCupoRol('${s.id}','${rol}',this.value)"></td>
+        <td style="border-left:1px solid rgba(15,23,22,.07);"><input class="cap-input" type="number" min="0" value="${s.porRol[rol].capacity}" ${esBeginner ? 'disabled title="Tu perfil no puede modificar cupos"' : ''} onchange="actualizarCupoRol('${s.id}','${rol}',this.value)"></td>
         <td>${s.porRol[rol].taken}</td>
       `).join('')}
       <td style="border-left:1px solid rgba(15,23,22,.07);">
@@ -413,6 +423,7 @@ async function eliminarCapacitacion(id) {
 
 initSidebar('tu-planif').then(async () => {
   lucide.createIcons();
+  await cargarPerfil();
   await cargarTiendas();
   await cargar();
 });

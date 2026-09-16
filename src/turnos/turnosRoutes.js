@@ -11,6 +11,21 @@ function limpiarRutTurnos(rut) {
   return String(rut || '').toUpperCase().replace(/[^0-9K]/g, '');
 }
 
+// El perfil "beginner" (coordinador local) puede ver Planificación y marcar
+// asistencia, pero no modificar ni reducir los cupos de turno ya
+// establecidos — evita cambios de dotación sin autorización previa.
+const CUPOS_ERROR = { ok: false, error: 'Tu perfil no tiene permiso para modificar los cupos de turno.', code: 'CUPOS_FORBIDDEN' };
+function esBeginner(req) {
+  return req.session?.role === 'beginner';
+}
+// El formulario de Tiendas manda los 3 turnos x 3 roles en cada guardado
+// (aunque solo se edite el nombre/dirección), así que hay que comparar
+// contra los cupos actuales — si no cambiaron, no es una edición de cupos.
+function cuposIguales(a, b) {
+  return ['AM', 'PM', 'FULL'].every(t =>
+    ['Picker', 'Shopper', 'Driver'].every(r => Number(a?.[t]?.[r]) === Number(b?.[t]?.[r])));
+}
+
 // ─── Router público (sin login del panel) — lo usan los Karriers desde su celular ──
 const publicRouter = Router();
 
@@ -161,6 +176,7 @@ adminRouter.put('/tiendas/:id', (req, res) => {
   const tienda = store.getTiendaById(req.params.id);
   if (!tienda) return res.status(404).json({ ok: false, error: 'Tienda no encontrada' });
   const { name, code, address, commune, region, active, capacity } = req.body || {};
+  if (capacity && esBeginner(req) && !cuposIguales(tienda.capacity, capacity)) return res.status(403).json(CUPOS_ERROR);
   if (name !== undefined) tienda.name = name;
   if (code !== undefined) tienda.code = code;
   if (address !== undefined) tienda.address = address;
@@ -337,6 +353,7 @@ function parsearFechaImport(v) {
 // plantilla). Actualiza los turnos que ya existan por Fecha+Turno, y crea
 // los que falten. Nunca duplica.
 adminRouter.post('/slots/importar', uploadCupos.single('file'), (req, res) => {
+  if (esBeginner(req)) return res.status(403).json(CUPOS_ERROR);
   const { storeId } = req.body || {};
   if (!storeId) return res.status(400).json({ ok: false, error: 'Falta la tienda' });
   if (!req.file) return res.status(400).json({ ok: false, error: 'Falta el archivo' });
@@ -409,6 +426,7 @@ adminRouter.put('/slots/:id', (req, res) => {
   const slot = store.getSlotById(req.params.id);
   if (!slot) return res.status(404).json({ ok: false, error: 'Turno no encontrado' });
   const { capacity, status } = req.body || {};
+  if (capacity !== undefined && esBeginner(req)) return res.status(403).json(CUPOS_ERROR);
   if (capacity !== undefined) slot.capacity = capacity; // { Picker, Shopper, Driver }
   if (status !== undefined) slot.status = status;
   store.saveSlot(slot);
@@ -442,16 +460,34 @@ adminRouter.delete('/karriers/:rut', (req, res) => {
   res.json({ ok: true });
 });
 
+// Resuelve el rango de fechas del Dashboard según el modo que mande el
+// front: semana (weekStart), día específico (date) o rango a mano
+// (dateFrom/dateTo) — así coberturaGeneral/dashboardKpis siempre reciben
+// un rango explícito sin importar qué filtro esté activo.
+function resolverRangoFechas(query) {
+  const { weekStart, date, dateFrom, dateTo } = query;
+  if (dateFrom && dateTo) return { desde: dateFrom, hasta: dateTo };
+  if (date) return { desde: date, hasta: date };
+  if (weekStart) {
+    const fin = new Date(weekStart + 'T00:00:00');
+    fin.setDate(fin.getDate() + 6);
+    return { desde: weekStart, hasta: fin.toISOString().slice(0, 10) };
+  }
+  return null;
+}
+
 adminRouter.get('/cobertura', (req, res) => {
-  const { weekStart, storeId, role } = req.query;
-  if (!weekStart) return res.status(400).json({ ok: false, error: 'Falta weekStart' });
-  res.json({ ok: true, cobertura: store.coberturaGeneral(weekStart, storeId || null, role || null) });
+  const { storeId, role } = req.query;
+  const rango = resolverRangoFechas(req.query);
+  if (!rango) return res.status(400).json({ ok: false, error: 'Falta weekStart, date o dateFrom/dateTo' });
+  res.json({ ok: true, cobertura: store.coberturaGeneral(rango.desde, rango.hasta, storeId || null, role || null) });
 });
 
 adminRouter.get('/dashboard', (req, res) => {
-  const { weekStart, storeId, role } = req.query;
-  if (!weekStart) return res.status(400).json({ ok: false, error: 'Falta weekStart' });
-  res.json({ ok: true, kpis: store.dashboardKpis(weekStart, storeId || null, role || null) });
+  const { storeId, role } = req.query;
+  const rango = resolverRangoFechas(req.query);
+  if (!rango) return res.status(400).json({ ok: false, error: 'Falta weekStart, date o dateFrom/dateTo' });
+  res.json({ ok: true, kpis: store.dashboardKpis(rango.desde, rango.hasta, storeId || null, role || null) });
 });
 
 adminRouter.get('/asignaciones', (req, res) => {

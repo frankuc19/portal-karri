@@ -29,6 +29,13 @@
   .chev { width:13px;height:13px;display:inline-block;vertical-align:middle;margin-right:6px;transition:transform .15s; }
   .chev.abierto { transform:rotate(90deg); }
   .fila-detalle td:first-child { padding-left:34px;color:var(--text-muted); }
+  .btn-ghost { background:none;color:rgba(15,23,22,.5);font-size:12px;padding:5px 8px;border-radius:6px;border:none;cursor:pointer;display:inline-flex;align-items:center;gap:5px; }
+  .btn-ghost:hover { background:#f4f5f6;color:#12181a; }
+  .modal-bg { position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:1000;padding:20px; }
+  .modal { background:#ffffff;border:1px solid rgba(15,23,22,.07);border-radius:14px;width:100%;max-width:380px; }
+  .modal-header { display:flex;align-items:center;justify-content:space-between;padding:18px 20px 14px;border-bottom:1px solid rgba(15,23,22,.07); }
+  .modal-body { padding:20px;display:flex;flex-direction:column;gap:12px; }
+  .modal-footer { display:flex;justify-content:flex-end;gap:8px;padding:14px 20px;border-top:1px solid rgba(15,23,22,.07); }
 </style>
 </head>
 <body class="flex h-screen overflow-hidden">
@@ -51,11 +58,17 @@
         <option value="Shopper">Shopper</option>
         <option value="Driver">Driver</option>
       </select>
-      <div class="week-nav">
+      <input type="date" class="input" id="filtro-dia" style="width:150px;" onchange="cambiarDia()">
+      <button class="btn-ghost" id="btn-limpiar-dia" onclick="limpiarDia()" title="Volver a vista por semana" style="display:none;"><i data-lucide="x" style="width:13px;height:13px;"></i> Día</button>
+      <div class="week-nav" id="week-nav">
         <button class="week-btn" onclick="cambiarSemana(-7)"><i data-lucide="chevron-left" style="width:14px;height:14px;"></i></button>
         <button class="btn-secondary" onclick="irHoy()">Hoy</button>
         <button class="week-btn" onclick="cambiarSemana(7)"><i data-lucide="chevron-right" style="width:14px;height:14px;"></i></button>
       </div>
+      <button class="btn-secondary" onclick="abrirModalRango()">
+        <i data-lucide="calendar-range" style="width:13px;height:13px;"></i> Rango
+      </button>
+      <button class="btn-ghost" id="btn-limpiar-rango" onclick="limpiarRango()" title="Volver a vista por semana" style="display:none;"><i data-lucide="x" style="width:13px;height:13px;"></i> Rango</button>
     </div>
   </header>
 
@@ -120,11 +133,31 @@
   </div>
 </div>
 
+<!-- Modal: ver un rango de fechas a elección -->
+<div class="modal-bg hidden" id="modal-rango-bg">
+  <div class="modal">
+    <div class="modal-header">
+      <p style="font-size:14px;font-weight:700;">Ver un rango de fechas</p>
+      <button class="btn-ghost" onclick="cerrarModalRango()"><i data-lucide="x" style="width:16px;height:16px;"></i></button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group"><p class="label mb-1">Desde</p><input type="date" class="input" id="rango-desde"></div>
+      <div class="form-group"><p class="label mb-1">Hasta</p><input type="date" class="input" id="rango-hasta"></div>
+      <p id="modal-rango-error" class="hidden" style="color:#dc2626;font-size:12px;"></p>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-secondary" onclick="cerrarModalRango()">Cancelar</button>
+      <button class="btn-primary" onclick="aplicarRango()">Ver rango</button>
+    </div>
+  </div>
+</div>
+
 <script src="/sidebar.js"></script>
 <script>
 const DIAS = ['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
 const TURNO_LABEL = { AM:'AM', PM:'PM', FULL:'FULL', CAPACITACION:'Capacitación' };
 let weekStart = mondayOf(new Date());
+let rangoActivo = null; // { desde, hasta } cuando el modo "Rango" está activo
 let settings = { minimumCoverageWarning: 80, minimumCoverageTarget: 95 };
 let tiendasAll = [];
 let ultimasFilas = [];
@@ -163,9 +196,49 @@ function cambiarSemana(dias) {
   const d = new Date(weekStart + 'T00:00:00');
   d.setDate(d.getDate() + dias);
   weekStart = mondayOf(d);
+  rangoActivo = null;
+  document.getElementById('filtro-dia').value = '';
   cargarTodo();
 }
-function irHoy() { weekStart = mondayOf(new Date()); cargarTodo(); }
+function irHoy() {
+  weekStart = mondayOf(new Date());
+  rangoActivo = null;
+  document.getElementById('filtro-dia').value = '';
+  cargarTodo();
+}
+function limpiarDia() {
+  document.getElementById('filtro-dia').value = '';
+  cargarTodo();
+}
+function cambiarDia() {
+  const dia = document.getElementById('filtro-dia').value;
+  if (dia) rangoActivo = null;
+  cargarTodo();
+}
+
+function abrirModalRango() {
+  document.getElementById('rango-desde').value = rangoActivo?.desde || weekStart;
+  document.getElementById('rango-hasta').value = rangoActivo?.hasta || weekStart;
+  document.getElementById('modal-rango-error').classList.add('hidden');
+  document.getElementById('modal-rango-bg').classList.remove('hidden');
+  lucide.createIcons();
+}
+function cerrarModalRango() { document.getElementById('modal-rango-bg').classList.add('hidden'); }
+function aplicarRango() {
+  const desde = document.getElementById('rango-desde').value;
+  const hasta = document.getElementById('rango-hasta').value;
+  const err = document.getElementById('modal-rango-error');
+  if (!desde || !hasta) { err.textContent = 'Completa ambas fechas'; err.classList.remove('hidden'); return; }
+  if (hasta < desde) { err.textContent = 'La fecha "hasta" no puede ser anterior a "desde"'; err.classList.remove('hidden'); return; }
+  rangoActivo = { desde, hasta };
+  document.getElementById('filtro-dia').value = '';
+  cerrarModalRango();
+  cargarTodo();
+}
+function limpiarRango() {
+  rangoActivo = null;
+  cargarTodo();
+}
 
 async function cargarTiendas() {
   const r = await fetch('/api/turnos/admin/tiendas').then(x => x.json());
@@ -273,14 +346,29 @@ function renderGrafico() {
 async function cargarTodo() {
   const storeId = document.getElementById('filtro-tienda').value;
   const role = document.getElementById('filtro-rol').value;
+  const dia = document.getElementById('filtro-dia').value;
 
-  const d = new Date(weekStart + 'T00:00:00');
-  const fin = new Date(d); fin.setDate(fin.getDate() + 6);
-  document.getElementById('rango-semana').textContent =
-    `Semana del ${d.getDate()}/${d.getMonth()+1} al ${fin.getDate()}/${fin.getMonth()+1}` +
-    (role ? ` · Rol: ${role}` : '');
+  document.getElementById('week-nav').style.display = (dia || rangoActivo) ? 'none' : 'flex';
+  document.getElementById('btn-limpiar-dia').style.display = dia ? 'inline-flex' : 'none';
+  document.getElementById('btn-limpiar-rango').style.display = (rangoActivo && !dia) ? 'inline-flex' : 'none';
 
-  const params = new URLSearchParams({ weekStart });
+  const params = new URLSearchParams();
+  if (dia) {
+    params.set('date', dia);
+    document.getElementById('rango-semana').textContent = `Día ${fmtFecha(dia)}`;
+  } else if (rangoActivo) {
+    params.set('dateFrom', rangoActivo.desde);
+    params.set('dateTo', rangoActivo.hasta);
+    document.getElementById('rango-semana').textContent = `Del ${fmtFecha(rangoActivo.desde)} al ${fmtFecha(rangoActivo.hasta)}`;
+  } else {
+    params.set('weekStart', weekStart);
+    const d = new Date(weekStart + 'T00:00:00');
+    const fin = new Date(d); fin.setDate(fin.getDate() + 6);
+    document.getElementById('rango-semana').textContent =
+      `Semana del ${d.getDate()}/${d.getMonth()+1} al ${fin.getDate()}/${fin.getMonth()+1}`;
+  }
+  if (role) document.getElementById('rango-semana').textContent += ` · Rol: ${role}`;
+
   if (storeId) params.set('storeId', storeId);
   if (role) params.set('role', role);
 
