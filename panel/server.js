@@ -35,6 +35,7 @@ const altasStore  = require('../src/onboarding/altasStore');
 const { sincronizarAltasOB } = require('../src/onboarding/altasSync');
 
 const cencoRoutes = require('../src/tarifario/cencoRoutes');
+const cencoPagoRoutes = require('../src/tarifario/cencoPagoRoutes');
 
 const DELAY_MS   = 5000;
 const PORT       = process.env.PORT || 3000;
@@ -339,6 +340,7 @@ const PAGE_SECTION = {
   '/onboarding/altas.html':            'onboarding',
   '/onboarding/kpi.html':              'onboarding',
   '/operaciones/tarifario.html':       'operaciones',
+  '/operaciones/estado-pago.html':     'operaciones',
   '/capacitacion/index.html':          'capacitacion',
   '/capacitacion/lms.html':            'capacitacion',
   '/turnos/dashboard.html':            'turnos',
@@ -475,6 +477,7 @@ app.use('/api/turnos/admin', requireAuthApi, turnosAdminRoutes);
 
 // ─── API: tarifario Cenco (por polígono) ──────────────────────────────────────
 app.use('/api/tarifario/cenco', requireAuthApi, cencoRoutes);
+app.use('/api/tarifario/cenco/pago', requireAuthApi, cencoPagoRoutes);
 
 // ─── Estado global ────────────────────────────────────────────────────────────
 let waClient           = null;

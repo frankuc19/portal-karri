@@ -37,6 +37,17 @@ router.put('/salas/:grupo', (req, res) => {
   res.json({ ok: true, mapa });
 });
 
+// ─── Mapa Código de tienda Cencosud → Sala ──────────────────────────────────
+router.get('/codigos-tienda', (_req, res) => {
+  res.json({ ok: true, mapa: store.getMapaCodigosTienda() });
+});
+router.put('/codigos-tienda/:codigo', (req, res) => {
+  const { sala } = req.body || {};
+  if (!sala) return res.status(400).json({ ok: false, error: 'Falta la sala' });
+  const mapa = store.setCodigoTienda(decodeURIComponent(req.params.codigo), sala);
+  res.json({ ok: true, mapa });
+});
+
 // ─── Tarifas por zona + Asegurados ──────────────────────────────────────────
 router.get('/tarifas', (_req, res) => {
   res.json({ ok: true, tarifas: store.getTarifas(), asegurados: store.getAsegurados() });

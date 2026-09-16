@@ -9,6 +9,7 @@ const TARIFAS_FILE    = path.join(DATA_DIR, 'tarifario_cenco_tarifas.json');
 const ASEGURADOS_FILE = path.join(DATA_DIR, 'tarifario_cenco_asegurados.json');
 const SALAS_FILE      = path.join(DATA_DIR, 'tarifario_cenco_salas.json'); // { grupoPoligono: sala }
 const NOMBRES_FILE    = path.join(DATA_DIR, 'tarifario_cenco_nombres.json'); // { nombreNorm: nombreCanonico }
+const CODIGOS_TIENDA_FILE = path.join(DATA_DIR, 'tarifario_cenco_codigos_tienda.json'); // { codigoTienda: sala }
 
 // Mismo patrón de caché en memoria por archivo que turnosStore/altasStore —
 // evita releer y re-parsear desde disco en cada consulta de tarifa.
@@ -143,6 +144,27 @@ function setSalaDeGrupo(grupo, sala) {
 function inferirSala(grupo, salasConocidas) {
   const g = normalizar(grupo);
   return salasConocidas.find(s => g.includes(normalizar(s))) || null;
+}
+
+// ─── Mapa Código de tienda Cencosud → Sala ─────────────────────────────────
+// Los pedidos que trae la API de Cencosud vienen con un código interno de
+// tienda (ej. "J843", "E659", "N747") que no es ni el grupo de polígono ni la
+// Sala — hay que traducirlo antes de poder resolver la tarifa. Se parte con
+// los 7 códigos conocidos hoy, editable desde el panel por si Cenco agrega
+// tiendas nuevas.
+const CODIGOS_TIENDA_DEFAULT = {
+  J843: 'San Bernardo', '101': 'San Bernardo', E843: 'San Bernardo',
+  J659: 'Puente Alto',  '407': 'Puente Alto',   E659: 'Puente Alto',
+  N747: 'Calera de Tango',
+};
+function getMapaCodigosTienda() {
+  const guardado = readJson(CODIGOS_TIENDA_FILE, null);
+  return guardado || { ...CODIGOS_TIENDA_DEFAULT };
+}
+function setCodigoTienda(codigo, sala) {
+  const mapa = { ...getMapaCodigosTienda(), [String(codigo).trim()]: sala };
+  writeJson(CODIGOS_TIENDA_FILE, mapa);
+  return mapa;
 }
 
 // ─── Zonas (polígonos) ──────────────────────────────────────────────────────
@@ -429,6 +451,7 @@ function resolverTarifa({ sala, lat, lng, fecha, esDomFestivo }) {
 module.exports = {
   parseWKT, puntoEnPoligono, normalizar,
   getMapaSalas, setSalaDeGrupo,
+  getMapaCodigosTienda, setCodigoTienda,
   getZonas, importarPoligonos,
   getTarifas, getAsegurados, importarTarifas, actualizarTarifa, crearTarifa, eliminarTarifa,
   resolverTarifa,

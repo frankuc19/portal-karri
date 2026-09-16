@@ -24,6 +24,7 @@
       perm:  'operaciones',
       items: [
         { label: 'Tarifario', href: '/operaciones/tarifario.html', icon: 'clipboard-list', key: 'op-tarifario' },
+        { label: 'Estado de Pago', href: '/operaciones/estado-pago.html', icon: 'wallet', key: 'op-estado-pago' },
       ],
     },
     {

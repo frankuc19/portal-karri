@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Karri — Estado de Pago</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/styles.css">
+<style>
+  .tbl-wrap { overflow-x:auto;border:1px solid rgba(15,23,22,.07);border-radius:10px; }
+  table { width:100%;border-collapse:collapse;font-size:12.5px; }
+  th { background:#f1f3f2;color:rgba(15,23,22,.35);font-weight:600;font-size:11px;letter-spacing:.04em;padding:9px 12px;text-align:left;white-space:nowrap;border-bottom:1px solid rgba(15,23,22,.07); }
+  td { padding:9px 12px;border-bottom:1px solid rgba(15,23,22,.05);color:#12181a;vertical-align:middle;white-space:nowrap; }
+  tr:last-child td { border-bottom:none; }
+  tr:hover td { background:rgba(15,23,22,.02); }
+  .td-mono { font-family:'JetBrains Mono',monospace;font-size:12px; }
+  .pagination { display:flex;align-items:center;gap:4px; }
+  .pg-btn { min-width:30px;height:30px;border-radius:6px;border:1px solid rgba(15,23,22,.07);background:#f1f3f2;color:rgba(15,23,22,.5);font-size:12px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center; }
+  .pg-btn:hover,.pg-btn.active { background:#f4f5f6;color:#12181a; }
+  .pg-btn.active { color:#059669;border-color:rgba(5,150,105,.3); }
+  .pg-btn:disabled { opacity:.35;cursor:default; }
+  .sala-select { background:#f4f5f6;border:1px solid rgba(15,23,22,.08);color:#12181a;border-radius:6px;padding:4px 8px;font-size:12px; }
+  .import-result { font-size:11.5px;border-radius:8px;padding:8px 12px;margin-top:8px; }
+  .import-result.ok { background:rgba(5,150,105,.1);color:#059669; }
+  .import-result.warn { background:rgba(180,83,9,.1);color:#b45309; }
+  .import-result.error { background:rgba(220,38,38,.1);color:#dc2626; }
+  .cliente-pill { display:flex;align-items:center;gap:8px;padding:10px 14px;border-radius:10px;border:1px solid rgba(15,23,22,.08);font-size:12.5px;font-weight:600; }
+  .cliente-pill.activo { background:rgba(5,150,105,.08);color:#059669;border-color:rgba(5,150,105,.25); }
+  .cliente-pill.proximamente { color:var(--text-faint);opacity:.6; }
+  .bar-bg { background:#e8edf5;border-radius:999px;height:14px;overflow:hidden; }
+  .bar-fill { height:100%;border-radius:999px;width:0%;background:linear-gradient(90deg,#059669 0%,#78fcd6 100%);transition:width .4s ease; }
+  .motivo-badge { font-size:10.5px;padding:2px 7px;border-radius:99px;font-weight:600; }
+  .motivo-ok { background:rgba(5,150,105,.1);color:#059669; }
+  .motivo-warn { background:rgba(180,83,9,.1);color:#b45309; }
+</style>
+</head>
+<body class="flex h-screen overflow-hidden">
+
+<aside id="sidebar" class="sidebar"></aside>
+
+<div class="flex-1 flex flex-col overflow-hidden">
+  <header style="background:var(--bg-800);border-bottom:1px solid var(--border);padding:14px 24px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;">
+    <div>
+      <h1 style="font-size:16px;font-weight:700;color:var(--text);">Estado de Pago</h1>
+      <p style="font-size:11px;color:var(--text-muted);margin-top:2px;">Calcula el Pago Conductor por período, en base al Tarifario configurado — información transitoria, no se guarda como maestro.</p>
+    </div>
+  </header>
+
+  <div class="flex-1 overflow-y-auto" style="padding:20px 24px;display:flex;flex-direction:column;gap:20px;">
+
+    <!-- Selector de cliente -->
+    <div class="card" style="padding:16px 20px;">
+      <p style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:10px;">Cliente</p>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;">
+        <div class="cliente-pill activo"><i data-lucide="check-circle-2" style="width:14px;height:14px;"></i> Cenco (por polígono)</div>
+        <div class="cliente-pill proximamente"><i data-lucide="clock" style="width:14px;height:14px;"></i> Falabella — próximamente</div>
+        <div class="cliente-pill proximamente"><i data-lucide="clock" style="width:14px;height:14px;"></i> Walmart — próximamente</div>
+      </div>
+    </div>
+
+    <!-- Mapeo código de tienda -> Sala -->
+    <div class="card" style="overflow:hidden;">
+      <div style="padding:16px 20px;border-bottom:1px solid rgba(15,23,22,.07);">
+        <p style="font-size:13px;font-weight:600;color:var(--text);">Código de tienda Cencosud → Sala</p>
+        <p style="font-size:11px;color:var(--text-muted);margin-top:2px;">Cada pedido llega con un código interno de tienda que hay que traducir a Sala antes de resolver la tarifa. Agrega uno nuevo si Cenco habilita una tienda que no aparece aquí.</p>
+      </div>
+      <div style="padding:16px 20px;">
+        <div id="codigos-tienda-config" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px 16px;"></div>
+        <div style="display:flex;gap:8px;margin-top:12px;align-items:center;">
+          <input class="input" id="nuevo-codigo" placeholder="Código nuevo (ej. J999)" style="width:180px;">
+          <select class="input" id="nuevo-codigo-sala" style="width:180px;"></select>
+          <button class="btn-secondary" onclick="agregarCodigoTienda()">
+            <i data-lucide="plus" style="width:13px;height:13px;"></i> Agregar
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Procesar -->
+    <div class="card" style="padding:16px 20px;">
+      <p style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:12px;">Procesar período</p>
+      <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end;">
+        <div class="form-group">
+          <label class="label">Fecha inicio</label>
+          <input class="input" type="date" id="fecha-inicio" style="width:160px;">
+        </div>
+        <div class="form-group">
+          <label class="label">Fecha fin</label>
+          <input class="input" type="date" id="fecha-fin" style="width:160px;">
+        </div>
+        <div class="form-group" style="flex:1;min-width:260px;">
+          <label class="label">Festivos del período (opcional)</label>
+          <input class="input" id="festivos-input" placeholder="Ej: 18/09/2026, 19/09/2026">
+        </div>
+        <button class="btn-primary" id="btn-procesar" onclick="procesarPago()">
+          <i data-lucide="play" style="width:14px;height:14px;"></i> Procesar
+        </button>
+      </div>
+      <div id="progreso-wrap" class="hidden" style="margin-top:16px;">
+        <div style="display:flex;justify-content:space-between;font-size:11.5px;color:var(--text-muted);margin-bottom:6px;">
+          <span id="progreso-label">Iniciando...</span>
+          <span id="progreso-pct">0%</span>
+        </div>
+        <div class="bar-bg"><div class="bar-fill" id="progreso-bar"></div></div>
+      </div>
+      <div id="pago-mensaje" class="hidden"></div>
+    </div>
+
+    <!-- Resultados -->
+    <div id="resultados-wrap" class="hidden" style="display:flex;flex-direction:column;gap:20px;">
+
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;">
+        <div class="card kpi-card" style="padding:16px 18px;">
+          <div class="label" style="margin-bottom:8px;">Total Pedidos</div>
+          <div style="font-size:26px;font-weight:700;color:var(--electric-text);" id="kpi-total-pedidos">—</div>
+        </div>
+        <div class="card kpi-card" style="padding:16px 18px;">
+          <div class="label" style="margin-bottom:8px;">Total Pago Conductor</div>
+          <div style="font-size:22px;font-weight:700;color:#2563eb;" id="kpi-total-pago">—</div>
+        </div>
+        <div class="card kpi-card" style="padding:16px 18px;">
+          <div class="label" style="margin-bottom:8px;">Sin Tarifa / Sala</div>
+          <div style="font-size:26px;font-weight:700;color:#b45309;" id="kpi-sin-tarifa">—</div>
+          <div style="font-size:11px;color:var(--text-muted);margin-top:3px;">requieren revisión</div>
+        </div>
+        <div class="card kpi-card" style="padding:16px 18px;">
+          <div class="label" style="margin-bottom:8px;">Fuera de Vigencia</div>
+          <div style="font-size:26px;font-weight:700;color:#dc2626;" id="kpi-fuera-vigencia">—</div>
+        </div>
+      </div>
+
+      <div class="card" style="overflow:hidden;">
+        <div style="padding:16px 20px;border-bottom:1px solid rgba(15,23,22,.07);">
+          <p style="font-size:13px;font-weight:600;color:var(--text);">Resumen por Sala</p>
+        </div>
+        <div style="padding:0 20px 16px;">
+          <div class="tbl-wrap" style="margin-top:16px;">
+            <table>
+              <thead><tr><th>Sala</th><th>Pedidos</th><th>Total Pago Conductor</th></tr></thead>
+              <tbody id="tbody-resumen-sala"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div class="card" style="overflow:hidden;">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid rgba(15,23,22,.07);flex-wrap:wrap;gap:10px;">
+          <div>
+            <p style="font-size:13px;font-weight:600;color:var(--text);">Detalle por pedido</p>
+            <p style="font-size:11px;color:var(--text-muted);margin-top:2px;">Datos calculados para este período — no quedan guardados en el servidor.</p>
+          </div>
+          <button class="btn-secondary" onclick="exportarExcel()">
+            <i data-lucide="download" style="width:13px;height:13px;"></i> Exportar Excel
+          </button>
+        </div>
+        <div style="padding:0 20px 16px;">
+          <div class="tbl-wrap" style="margin-top:16px;">
+            <table>
+              <thead><tr>
+                <th>ID Orden</th><th>Fecha</th><th>Sala</th><th>Zona</th><th>Tipo Día</th>
+                <th>Estado</th><th>Tarifa</th><th>Bono</th><th>Mult.</th><th>Pago Conductor</th><th>Estado tarifa</th>
+              </tr></thead>
+              <tbody id="tbody-detalle"></tbody>
+            </table>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px;">
+            <span style="font-size:12px;color:var(--text-muted);" id="detalle-count-label">— registros</span>
+            <div class="pagination" id="pg-detalle"></div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+  </div>
+</div>
+
+<script src="/sidebar.js"></script>
+<script>
+window.initSidebar('op-estado-pago');
+
+let codigosTienda = {};
+let salasConocidas = [];
+let jobIdActual = null;
+let pollTimer = null;
+let detalleActual = [];
+let currentPage = 1;
+const PAGE_SIZE = 10;
+
+async function init() {
+  const hoy = new Date().toISOString().slice(0, 10);
+  document.getElementById('fecha-fin').value = hoy;
+  const hace7 = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10);
+  document.getElementById('fecha-inicio').value = hace7;
+
+  await cargarSalasConocidas();
+  await cargarCodigosTienda();
+  if (window.lucide) lucide.createIcons();
+}
+
+async function cargarSalasConocidas() {
+  const r = await fetch('/api/tarifario/cenco/zonas').then(x => x.json());
+  const zonas = r.ok ? r.zonas : [];
+  salasConocidas = [...new Set(zonas.map(z => z.sala).filter(Boolean))].sort();
+  const sel = document.getElementById('nuevo-codigo-sala');
+  sel.innerHTML = salasConocidas.map(s => `<option value="${s}">${s}</option>`).join('');
+}
+
+async function cargarCodigosTienda() {
+  const r = await fetch('/api/tarifario/cenco/codigos-tienda').then(x => x.json());
+  codigosTienda = r.ok ? r.mapa : {};
+  renderCodigosTiendaConfig();
+}
+
+function renderCodigosTiendaConfig() {
+  const cont = document.getElementById('codigos-tienda-config');
+  const entradas = Object.entries(codigosTienda).sort((a, b) => a[0].localeCompare(b[0]));
+  if (entradas.length === 0) {
+    cont.innerHTML = '<p style="font-size:12px;color:var(--text-faint);">Sin códigos configurados todavía.</p>';
+    return;
+  }
+  cont.innerHTML = entradas.map(([codigo, sala]) => `
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);">
+      <span class="td-mono" style="font-size:12.5px;">${codigo}</span>
+      <select class="sala-select" onchange="asignarCodigoTienda('${codigo}', this.value)">
+        ${salasConocidas.map(s => `<option value="${s}" ${s === sala ? 'selected' : ''}>${s}</option>`).join('')}
+      </select>
+    </div>`).join('');
+}
+
+async function asignarCodigoTienda(codigo, sala) {
+  const r = await fetch(`/api/tarifario/cenco/codigos-tienda/${encodeURIComponent(codigo)}`, {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sala }),
+  }).then(x => x.json());
+  if (!r.ok) { alert(r.error || 'No se pudo actualizar'); return; }
+  codigosTienda = r.mapa;
+  renderCodigosTiendaConfig();
+}
+
+async function agregarCodigoTienda() {
+  const codigo = document.getElementById('nuevo-codigo').value.trim();
+  const sala = document.getElementById('nuevo-codigo-sala').value;
+  if (!codigo || !sala) { alert('Completa el código y la Sala.'); return; }
+  await asignarCodigoTienda(codigo, sala);
+  document.getElementById('nuevo-codigo').value = '';
+}
+
+function parseFestivosInput(texto) {
+  return String(texto || '').split(',').map(s => s.trim()).filter(Boolean);
+}
+
+async function procesarPago() {
+  const fechaInicio = document.getElementById('fecha-inicio').value;
+  const fechaFin = document.getElementById('fecha-fin').value;
+  const festivos = parseFestivosInput(document.getElementById('festivos-input').value);
+  const msj = document.getElementById('pago-mensaje');
+  msj.classList.add('hidden');
+
+  if (!fechaInicio || !fechaFin) { alert('Elige fecha de inicio y fin.'); return; }
+  if (fechaFin < fechaInicio) { alert('La fecha de fin no puede ser anterior a la de inicio.'); return; }
+
+  document.getElementById('btn-procesar').disabled = true;
+  document.getElementById('resultados-wrap').classList.add('hidden');
+  document.getElementById('progreso-wrap').classList.remove('hidden');
+  document.getElementById('progreso-label').textContent = 'Solicitando token y comenzando descarga...';
+  document.getElementById('progreso-bar').style.width = '0%';
+  document.getElementById('progreso-pct').textContent = '0%';
+
+  const r = await fetch('/api/tarifario/cenco/pago/procesar', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ fechaInicio, fechaFin, festivos }),
+  }).then(x => x.json());
+
+  if (!r.ok) {
+    document.getElementById('progreso-wrap').classList.add('hidden');
+    document.getElementById('btn-procesar').disabled = false;
+    mostrarMensajePago('error', r.error || 'No se pudo iniciar el proceso.');
+    return;
+  }
+
+  jobIdActual = r.jobId;
+  if (pollTimer) clearInterval(pollTimer);
+  pollTimer = setInterval(pollEstado, 900);
+  pollEstado();
+}
+
+async function pollEstado() {
+  if (!jobIdActual) return;
+  const r = await fetch(`/api/tarifario/cenco/pago/estado/${jobIdActual}`).then(x => x.json());
+  if (!r.ok) return;
+  const s = r.estado;
+
+  const pct = s.totalDias > 0 ? Math.min(100, Math.round((s.diaActual / s.totalDias) * 100)) : 0;
+  document.getElementById('progreso-bar').style.width = pct + '%';
+  document.getElementById('progreso-pct').textContent = pct + '%';
+  document.getElementById('progreso-label').textContent =
+    s.totalDias > 0 ? `Día ${s.diaActual} de ${s.totalDias} — ${s.diaLabel} (${s.filasAcumuladas} pedidos únicos hasta ahora)` : 'Iniciando...';
+
+  if (s.finalizado) {
+    clearInterval(pollTimer);
+    pollTimer = null;
+    document.getElementById('btn-procesar').disabled = false;
+    document.getElementById('progreso-wrap').classList.add('hidden');
+
+    if (s.errorFatal) {
+      mostrarMensajePago('error', s.errorFatal);
+      return;
+    }
+    await cargarResultado();
+  }
+}
+
+function mostrarMensajePago(tipo, texto) {
+  const msj = document.getElementById('pago-mensaje');
+  msj.classList.remove('hidden');
+  msj.className = `import-result ${tipo}`;
+  msj.textContent = texto;
+}
+
+async function cargarResultado() {
+  const r = await fetch(`/api/tarifario/cenco/pago/resultado/${jobIdActual}`).then(x => x.json());
+  if (!r.ok) { mostrarMensajePago('error', r.error || 'No se pudo obtener el resultado.'); return; }
+
+  detalleActual = r.detalle;
+  const resumen = r.resumen;
+
+  if (r.errores && r.errores.length > 0) {
+    mostrarMensajePago('warn', `${r.errores.length} día(s) con error al descargar: ` + r.errores.map(e => `${e.dia} (${e.motivo})`).join('; '));
+  }
+
+  document.getElementById('kpi-total-pedidos').textContent = resumen.totalPedidos;
+  document.getElementById('kpi-total-pago').textContent = pesos(resumen.totalPago);
+  document.getElementById('kpi-sin-tarifa').textContent = resumen.sinTarifaConfigurada + resumen.sinSalaAsignada;
+  document.getElementById('kpi-fuera-vigencia').textContent = resumen.fueraDeVigencia;
+
+  const tbodySala = document.getElementById('tbody-resumen-sala');
+  const salas = Object.entries(resumen.porSala).sort((a, b) => a[0].localeCompare(b[0]));
+  tbodySala.innerHTML = salas.length === 0
+    ? '<tr><td colspan="3" style="text-align:center;color:var(--text-faint);padding:20px;">Sin pedidos clasificados por Sala.</td></tr>'
+    : salas.map(([sala, d]) => `<tr><td>${sala}</td><td>${d.pedidos}</td><td>${pesos(d.total)}</td></tr>`).join('');
+
+  currentPage = 1;
+  renderDetalle();
+  document.getElementById('resultados-wrap').classList.remove('hidden');
+  if (window.lucide) lucide.createIcons();
+}
+
+const MOTIVO_LABEL = {
+  SIN_CODIGO_TIENDA: 'Sin código de tienda',
+  SIN_SALA_ASIGNADA: 'Código sin Sala asignada',
+  SIN_FECHA_PEDIDO: 'Sin fecha de pedido',
+  SIN_COORDENADAS: 'Sin coordenadas válidas',
+  FUERA_DE_TODOS_LOS_POLIGONOS: 'Fuera de polígonos (Asegurado)',
+  FUERA_DE_TODOS_LOS_POLIGONOS_SIN_ASEGURADO: 'Fuera de polígonos (sin Asegurado)',
+  SIN_TARIFA_CONFIGURADA: 'Zona sin tarifa configurada',
+  FUERA_DE_VIGENCIA: 'Tarifa fuera de vigencia',
+};
+
+function renderDetalle() {
+  const total = detalleActual.length;
+  const pages = Math.ceil(total / PAGE_SIZE) || 1;
+  currentPage = Math.min(currentPage, pages);
+  const start = (currentPage - 1) * PAGE_SIZE;
+  const pagina = detalleActual.slice(start, start + PAGE_SIZE);
+
+  document.getElementById('detalle-count-label').textContent = `${total} registro${total !== 1 ? 's' : ''}`;
+
+  const tbody = document.getElementById('tbody-detalle');
+  tbody.innerHTML = pagina.length === 0
+    ? '<tr><td colspan="11" style="text-align:center;color:var(--text-faint);padding:24px;">Sin pedidos en este período.</td></tr>'
+    : pagina.map(f => {
+        const badge = f.motivo
+          ? `<span class="motivo-badge motivo-warn">${MOTIVO_LABEL[f.motivo] || f.motivo}</span>`
+          : `<span class="motivo-badge motivo-ok">OK</span>`;
+        return `
+        <tr>
+          <td class="td-mono">${f.ordenId}</td>
+          <td>${f.fecha || '—'}</td>
+          <td>${f.sala || '—'}</td>
+          <td>${f.zona || '—'}</td>
+          <td>${f.tipoDia || '—'}</td>
+          <td>${f.estado || '—'}</td>
+          <td class="td-mono">${pesos(f.tarifaBase)}</td>
+          <td class="td-mono">${pesos(f.bono)}</td>
+          <td class="td-mono">${f.multiplicador}</td>
+          <td class="td-mono" style="font-weight:600;">${pesos(f.montoPagoConductor)}</td>
+          <td>${badge}</td>
+        </tr>`;
+      }).join('');
+
+  renderPaginacionDetalle(total);
+}
+
+function renderPaginacionDetalle(total) {
+  const pages = Math.ceil(total / PAGE_SIZE) || 1;
+  const cur = currentPage;
+  const pg = document.getElementById('pg-detalle');
+  let html = `<button class="pg-btn" onclick="irPaginaDetalle(${cur - 1})" ${cur <= 1 ? 'disabled' : ''}>‹</button>`;
+  for (let i = 1; i <= pages; i++) {
+    if (pages > 7 && i > 2 && i < pages - 1 && Math.abs(i - cur) > 1) {
+      if (i === 3 || i === pages - 2) html += `<span style="padding:0 4px;color:var(--text-faint);">…</span>`;
+      continue;
+    }
+    html += `<button class="pg-btn ${i === cur ? 'active' : ''}" onclick="irPaginaDetalle(${i})">${i}</button>`;
+  }
+  html += `<button class="pg-btn" onclick="irPaginaDetalle(${cur + 1})" ${cur >= pages ? 'disabled' : ''}>›</button>`;
+  pg.innerHTML = html;
+}
+
+function irPaginaDetalle(n) {
+  const pages = Math.ceil(detalleActual.length / PAGE_SIZE) || 1;
+  currentPage = Math.max(1, Math.min(n, pages));
+  renderDetalle();
+}
+
+function exportarExcel() {
+  if (!jobIdActual) return;
+  window.open(`/api/tarifario/cenco/pago/resultado/${jobIdActual}?formato=excel`, '_blank');
+}
+
+function pesos(n) {
+  return '$' + Number(n || 0).toLocaleString('es-CL');
+}
+
+init();
+</script>
+</body>
+</html>
