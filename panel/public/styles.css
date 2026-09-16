@@ -17,21 +17,48 @@
   --bg-500:     #f4f5f6;
   --bg-400:     #e3e6e5;
   --text:       rgba(15,23,22,1);
+  --text-rgb:   15,23,22; /* mismo tono que --text, en rgb plano — para tintes rgba() con alfa a medida */
   --text-muted: rgba(15,23,22,0.55);
   --text-faint: rgba(15,23,22,0.35);
   --border:     rgba(15,23,22,0.08);
+  --scrollbar-thumb:       #d4d8d6;
+  --scrollbar-thumb-hover: #bcc1be;
+}
+
+/* ── Vista oscura ──
+   Se activa agregando data-theme="dark" a <html> (ver theme-init.js +
+   sidebar.js). La vista clara de arriba sigue siendo el valor por defecto:
+   sin ese atributo, nada cambia. Los colores semánticos (verde de marca,
+   ámbar de advertencia, rojo de error, azul de acento) se mantienen iguales
+   en ambos temas a propósito — solo se invierten los neutros estructurales
+   (fondos, bordes, texto). */
+:root[data-theme="dark"] {
+  --electric-text: #78fcd6; /* el verde oscurecido no rinde sobre fondo oscuro — usa el brillante */
+  --bg-900:     #0f1211;
+  --bg-800:     #171b1a;
+  --bg-700:     #1c211f;
+  --bg-600:     #232928;
+  --bg-500:     #262c2b;
+  --bg-400:     #323938;
+  --text:       rgba(231,236,235,1);
+  --text-rgb:   231,236,235;
+  --text-muted: rgba(231,236,235,0.6);
+  --text-faint: rgba(231,236,235,0.35);
+  --border:     rgba(231,236,235,0.1);
+  --scrollbar-thumb:       #3a4140;
+  --scrollbar-thumb-hover: #4a5251;
 }
 
 /* ── Reset ── */
 *, *::before, *::after { box-sizing: border-box; }
 html, body { height: 100%; overflow: hidden; }
-body { background: #f4f5f4; color: #12181a; font-family: Inter, sans-serif; }
+body { background: var(--bg-900); color: var(--text); font-family: Inter, sans-serif; transition: background-color .15s, color .15s; }
 
 /* ── Custom scrollbar ── */
 ::-webkit-scrollbar { width: 5px; height: 5px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #d4d8d6; border-radius: 99px; }
-::-webkit-scrollbar-thumb:hover { background: #bcc1be; }
+::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 99px; }
+::-webkit-scrollbar-thumb:hover { background: var(--scrollbar-thumb-hover); }
 .scrollbar-hide::-webkit-scrollbar { display: none; }
 .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
 
@@ -86,10 +113,11 @@ body { background: #f4f5f4; color: #12181a; font-family: Inter, sans-serif; }
 
 /* ── Card ── */
 .card {
-  background: #ffffff;
-  border: 1px solid rgba(15,23,22,0.08);
+  background: var(--bg-800);
+  border: 1px solid var(--border);
   border-radius: 12px;
   padding: 20px;
+  transition: background-color .15s, border-color .15s;
   /* Evita que un contenedor flex (p.ej. el área de contenido con
      overflow-y:auto) encoja la card en vez de hacer scroll: cuando
      overflow no es "visible", el mínimo automático de un flex item
@@ -117,14 +145,14 @@ body { background: #f4f5f4; color: #12181a; font-family: Inter, sans-serif; }
 
 .btn-secondary {
   display: inline-flex; align-items: center; gap: 6px;
-  background: #f1f3f2; color: #12181a;
-  border: 1px solid rgba(15,23,22,0.1);
+  background: var(--bg-600); color: var(--text);
+  border: 1px solid var(--border);
   font-weight: 600; font-size: 12px;
   border-radius: 8px; padding: 6px 14px;
   cursor: pointer; transition: background .12s;
   white-space: nowrap;
 }
-.btn-secondary:hover:not(:disabled) { background: #e3e6e5; }
+.btn-secondary:hover:not(:disabled) { background: var(--bg-400); }
 .btn-secondary:disabled { opacity: .3; cursor: not-allowed; }
 
 .btn-danger {
@@ -151,19 +179,19 @@ body { background: #f4f5f4; color: #12181a; font-family: Inter, sans-serif; }
 
 /* ── Form elements ── */
 .input {
-  background: #f4f5f6;
-  border: 1px solid rgba(15,23,22,0.1);
-  color: #12181a; border-radius: 8px;
+  background: var(--bg-500);
+  border: 1px solid var(--border);
+  color: var(--text); border-radius: 8px;
   padding: 7px 12px; font-size: 13px;
-  outline: none; transition: border-color .15s;
+  outline: none; transition: border-color .15s, background-color .15s;
   width: 100%;
 }
 .input:focus { border-color: #059669; }
-.input::placeholder { color: rgba(15,23,22,.35); }
+.input::placeholder { color: var(--text-faint); }
 select.input { cursor: pointer; }
 
 .label {
-  font-size: 10px; color: rgba(15,23,22,.55);
+  font-size: 10px; color: var(--text-muted);
   font-weight: 600; text-transform: uppercase;
   letter-spacing: .08em;
 }
@@ -208,8 +236,8 @@ select.input { cursor: pointer; }
   border: 1px solid rgba(180,83,9,.25);
 }
 .badge-muted {
-  background: rgba(15,23,22,.06); color: rgba(15,23,22,.6);
-  border: 1px solid rgba(15,23,22,.1);
+  background: rgba(var(--text-rgb),.06); color: rgba(var(--text-rgb),.6);
+  border: 1px solid rgba(var(--text-rgb),.1);
 }
 .badge-red {
   background: rgba(220,38,38,.08); color: #dc2626;
@@ -234,8 +262,8 @@ select.input { cursor: pointer; }
   font-size: 10px; font-weight: 700; text-transform: uppercase;
 }
 .badge-beginner {
-  background: rgba(15,23,22,.06); color: rgba(15,23,22,.6);
-  border: 1px solid rgba(15,23,22,.1);
+  background: rgba(var(--text-rgb),.06); color: rgba(var(--text-rgb),.6);
+  border: 1px solid rgba(var(--text-rgb),.1);
   padding: 2px 10px; border-radius: 99px;
   font-size: 10px; font-weight: 700; text-transform: uppercase;
 }
@@ -243,12 +271,12 @@ select.input { cursor: pointer; }
 /* ── Step pills (email / whatsapp wizard) ── */
 .step-pill { padding: 5px 14px; border-radius: 99px; font-size: 11px; font-weight: 600; cursor: default; }
 .step-active  { background: #78fcd6; color: #080b0a; box-shadow: 0 0 10px rgba(5,150,105,.3); }
-.step-done    { background: #f1f3f2; color: #059669; cursor: pointer; }
-.step-pending { background: #f4f5f6; color: rgba(15,23,22,.3); }
+.step-done    { background: var(--bg-600); color: var(--electric-text); cursor: pointer; }
+.step-pending { background: var(--bg-500); color: var(--text-faint); }
 
 /* ── Drop zone (file upload) ── */
 .drop-zone {
-  border: 2px dashed rgba(15,23,22,.15);
+  border: 2px dashed rgba(var(--text-rgb),.15);
   border-radius: 12px; padding: 40px;
   text-align: center; cursor: pointer;
   transition: border-color .2s;
@@ -263,19 +291,19 @@ select.input { cursor: pointer; }
   padding: 6px 14px; border-radius: 8px;
   font-size: 12px; font-weight: 600;
   cursor: pointer; border: 1px solid transparent;
-  transition: all .12s; color: rgba(15,23,22,.5);
+  transition: all .12s; color: rgba(var(--text-rgb),.5);
 }
-.filter-tab.active { background: rgba(5,150,105,.08); color: #059669; border-color: rgba(5,150,105,.2); }
-.filter-tab:hover:not(.active) { background: rgba(15,23,22,.04); color: #12181a; }
+.filter-tab.active { background: rgba(5,150,105,.08); color: var(--electric-text); border-color: rgba(5,150,105,.2); }
+.filter-tab:hover:not(.active) { background: rgba(var(--text-rgb),.06); color: var(--text); }
 
 /* ── Section checkboxes (perfiles) ── */
 .sec-option {
   display: flex; align-items: center; gap: 10px;
-  padding: 10px 14px; border: 1px solid rgba(15,23,22,.1);
+  padding: 10px 14px; border: 1px solid rgba(var(--text-rgb),.1);
   border-radius: 10px; cursor: pointer;
   transition: border-color .15s, background .15s;
 }
-.sec-option:hover { background: rgba(15,23,22,.025); }
+.sec-option:hover { background: rgba(var(--text-rgb),.04); }
 .sec-option input[type=checkbox] { accent-color: #059669; width: 15px; height: 15px; flex-shrink: 0; }
 .sec-option.checked { border-color: rgba(5,150,105,.3); background: rgba(5,150,105,.05); }
 
@@ -289,3 +317,122 @@ select.input { cursor: pointer; }
 #qrWrap.show { display: flex; }
 #progressBar { display: none; }
 #progressBar.show { display: block; }
+
+/* ═══════════════════════════════════════════════════════════
+   Vista oscura — overrides para patrones que cada página repite
+   en su propio <style> local (tablas, modales, inputs de captura,
+   paginación, etc.). Estos selectores acá son más específicos que
+   los mismos nombres declarados sin data-theme en el <style> de
+   cada página (un selector con atributo [data-theme="dark"] pesa
+   más que el mismo selector sin él), así que ganan sin necesidad
+   de tocar los ~18 archivos HTML uno por uno.
+   ═══════════════════════════════════════════════════════════ */
+
+/* Colores neutros escritos directo en atributos style="" — un estilo
+   inline siempre pesa más que cualquier selector de hoja de estilos, así
+   que la especificidad de atributo no alcanza acá; se apunta por el
+   CONTENIDO del propio atributo con [style*="..."] y se fuerza con
+   !important. Es el único lugar del sistema donde hace falta. Cubre los
+   ~300 usos repetidos de estos mismos tonos (header, títulos, fondos de
+   paneles) sin tener que tocar cada uno de los ~18 HTML. El texto tenue en
+   rgba(15,23,22,*) se colapsa a un solo --text-muted — se pierde el matiz
+   exacto de alfa entre variantes, pero es preferible a texto oscuro
+   invisible sobre fondo oscuro. */
+[data-theme="dark"] header,
+[data-theme="dark"] [style*="background:#ffffff"],
+[data-theme="dark"] [style*="background: #ffffff"],
+[data-theme="dark"] [style*="background:#fff;"],
+[data-theme="dark"] [style*="background: #fff;"] { background: var(--bg-800) !important; }
+
+[data-theme="dark"] [style*="background:#f4f5f6"],
+[data-theme="dark"] [style*="background: #f4f5f6"],
+[data-theme="dark"] [style*="background:#f1f3f2"],
+[data-theme="dark"] [style*="background: #f1f3f2"] { background: var(--bg-600) !important; }
+
+[data-theme="dark"] [style*="background:#e3e6e5"],
+[data-theme="dark"] [style*="background: #e3e6e5"] { background: var(--bg-400) !important; }
+
+[data-theme="dark"] [style*="color:#12181a"],
+[data-theme="dark"] [style*="color: #12181a"] { color: var(--text) !important; }
+
+[data-theme="dark"] [style*="color:rgba(15,23,22"],
+[data-theme="dark"] [style*="color: rgba(15,23,22"] { color: var(--text-muted) !important; }
+
+/* Tablas (.tbl-wrap/table/th/td) — turnos/*, operaciones/* */
+[data-theme="dark"] .tbl-wrap { border-color: var(--border); }
+[data-theme="dark"] table th { background: var(--bg-600); color: var(--text-faint); border-color: var(--border); }
+[data-theme="dark"] table td { color: var(--text); border-color: var(--border); }
+[data-theme="dark"] tr:hover td { background: rgba(var(--text-rgb),.04); }
+
+/* Modales */
+[data-theme="dark"] .modal-bg { background: rgba(0,0,0,.72); }
+[data-theme="dark"] .modal { background: var(--bg-800); border-color: var(--border); }
+[data-theme="dark"] .modal-header,
+[data-theme="dark"] .modal-footer { border-color: var(--border); }
+
+/* Botones fantasma y de fila */
+[data-theme="dark"] .btn-ghost { color: var(--text-muted); }
+[data-theme="dark"] .btn-ghost:hover { background: var(--bg-500); color: var(--text); }
+[data-theme="dark"] .btn-danger-ghost:hover { background: rgba(220,38,38,.12); }
+
+/* Navegación de semana (dashboard/planificación/asignaciones) */
+[data-theme="dark"] .week-btn,
+[data-theme="dark"] .week-nav { background: var(--bg-600); color: var(--text); border-color: var(--border); }
+[data-theme="dark"] .week-btn:hover { background: var(--bg-400); }
+
+/* Paginación */
+[data-theme="dark"] .pg-btn { background: var(--bg-600); color: var(--text-muted); border-color: var(--border); }
+[data-theme="dark"] .pg-btn:hover { background: var(--bg-400); color: var(--text); }
+
+/* Inputs de captura puntual (planificación, tarifario, asistencia, configuración) */
+[data-theme="dark"] .cap-input,
+[data-theme="dark"] .sala-select,
+[data-theme="dark"] .hora-input,
+[data-theme="dark"] .obs-add input,
+[data-theme="dark"] .link-box,
+[data-theme="dark"] select.status-input { background: var(--bg-500); color: var(--text); border-color: var(--border); }
+[data-theme="dark"] .obs-add button { background: var(--bg-500); border-color: var(--border); }
+[data-theme="dark"] .obs-add button:hover { background: var(--bg-400); }
+[data-theme="dark"] .obs-item { background: var(--bg-600); }
+
+/* Formularios en modales */
+[data-theme="dark"] .form-section { color: var(--text-faint); border-color: var(--border); }
+
+/* Tarjetas KPI */
+[data-theme="dark"] .kpi-card:hover { border-color: rgba(var(--text-rgb),.2); }
+
+/* Barras de progreso (Estado de Pago, Onboarding KPI) */
+[data-theme="dark"] .bar-bg,
+[data-theme="dark"] .bar-track { background: var(--bg-600); }
+[data-theme="dark"] .bar-label { color: var(--text-muted); }
+
+/* Switch (turnos/configuración) */
+[data-theme="dark"] .switch .slider { background: var(--bg-400); }
+
+/* Toggle Sí/No (asistencia) */
+[data-theme="dark"] .asist-toggle,
+[data-theme="dark"] .asist-btn { background: var(--bg-700); color: var(--text-muted); border-color: var(--border); }
+
+/* Desglose por rol (tiendas) */
+[data-theme="dark"] .rol-breakdown,
+[data-theme="dark"] .cap-grid .hcell { color: var(--text-muted); }
+[data-theme="dark"] .rol-breakdown b { color: var(--text); }
+
+/* Mapa Leaflet (Tarifario Cenco) — invierte los tiles de OpenStreetMap para
+   que no quede un rectángulo blanco quemando en medio de la página oscura;
+   los polígonos/marcadores (que sí van por color explícito) se re-invierten
+   para no perder su color real. */
+[data-theme="dark"] .leaflet-tile-pane { filter: invert(1) hue-rotate(180deg) brightness(.92) contrast(.9); }
+[data-theme="dark"] .leaflet-overlay-pane,
+[data-theme="dark"] .leaflet-marker-pane,
+[data-theme="dark"] .leaflet-popup { filter: invert(1) hue-rotate(180deg); }
+
+/* ── Botón de tema (sidebar) ── */
+.theme-toggle {
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+  width: 100%; padding: 8px 10px; margin-top: 8px;
+  border-radius: 8px; border: 1px solid rgba(255,255,255,.08);
+  background: rgba(255,255,255,.03); color: rgba(231,236,235,.6);
+  font-size: 11.5px; font-weight: 600; cursor: pointer;
+}
+.theme-toggle:hover { background: rgba(255,255,255,.07); color: #e7eceb; }

@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
+<script src="/theme-init.js"></script>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Karri — Tarifario Cenco</title>
@@ -322,11 +323,7 @@ function pesos(n) {
   return '$' + Number(n).toLocaleString('es-CL');
 }
 
-// ══════════════════════════════════════════════════════
-// INIT
-// ══════════════════════════════════════════════════════
 lucide.createIcons();
-initCenco();
 
 // ══════════════════════════════════════════════════════
 // CENCO — datos por polígono
@@ -937,6 +934,12 @@ function mostrarResultadoImport(r, resumen) {
   }
   el.innerHTML = html;
 }
+
+// ══════════════════════════════════════════════════════
+// INIT — al final del script, después de que estén declaradas todas las
+// variables (mapaCenco, cencoZonas, etc.) que initCenco() usa.
+// ══════════════════════════════════════════════════════
+initCenco();
 </script>
 </body>
 </html>

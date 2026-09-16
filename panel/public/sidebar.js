@@ -1,5 +1,30 @@
 /* sidebar.js — inyecta la sidebar con secciones según rol y permisos */
 (function () {
+  // ── Tema claro/oscuro ──────────────────────────────────────────────────
+  // theme-init.js ya aplicó el tema guardado (si era oscuro) antes de que
+  // la página pintara, para evitar el parpadeo. Acá solo se agrega el
+  // botón para cambiarlo y se guarda la preferencia. Claro sigue siendo el
+  // valor por defecto: si nunca se tocó el botón, no hay nada guardado y
+  // la página queda clara.
+  function temaActual() {
+    return document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
+  }
+  function aplicarTema(t) {
+    document.documentElement.setAttribute('data-theme', t);
+    try { localStorage.setItem('karri_theme', t); } catch (e) {}
+  }
+  function actualizarBotonTema() {
+    const btn = document.getElementById('theme-toggle-btn');
+    if (!btn) return;
+    const oscuro = temaActual() === 'dark';
+    btn.innerHTML = `<i data-lucide="${oscuro ? 'sun' : 'moon'}" style="width:13px;height:13px;"></i> Vista ${oscuro ? 'clara' : 'oscura'}`;
+    if (window.lucide) lucide.createIcons({ el: btn });
+  }
+  window._toggleTema = function () {
+    aplicarTema(temaActual() === 'dark' ? 'light' : 'dark');
+    actualizarBotonTema();
+  };
+
   const SECTIONS = [
     {
       label: 'Finanzas',
@@ -268,6 +293,7 @@
             <span style="color:rgba(120,252,214,0.7);font-weight:600;">${me.name || me.username}</span>
             <span style="display:inline-block;margin-left:6px;font-size:9px;background:${badge.bg};color:${badge.color};padding:1px 7px;border-radius:99px;border:1px solid ${badge.border};font-weight:700;text-transform:uppercase;">${badge.label}</span>
           </div>
+          <button type="button" id="theme-toggle-btn" class="theme-toggle" onclick="window._toggleTema()"></button>
           <form method="POST" action="/logout">
             <button type="submit" class="nav-item w-full text-left" style="color:rgba(231,236,235,0.4);">
               <i data-lucide="log-out" style="width:15px;height:15px;flex-shrink:0;"></i>
@@ -278,6 +304,7 @@
       </div>`;
 
     if (window.lucide) lucide.createIcons({ el });
+    actualizarBotonTema();
 
     const logoCanvas = el.querySelector('#sidebar-logo');
     if (logoCanvas) applyLogoCanvas(logoCanvas).catch(() => {});
