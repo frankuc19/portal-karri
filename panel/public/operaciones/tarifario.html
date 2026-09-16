@@ -959,7 +959,8 @@ async function importarPoligonos(input) {
   form.append('file', file);
   const r = await fetch('/api/tarifario/cenco/zonas/importar', { method: 'POST', body: form }).then(x => x.json());
   input.value = '';
-  mostrarResultadoImport(r, r.ok ? `${r.creadas} polígono(s) cargados de ${r.filasLeidas} fila(s).` : (r.error || 'Error al importar'));
+  const fusionMsg = r.ok && r.filasFusionadas > 0 ? ` Se fusionaron ${r.filasFusionadas} fila(s) duplicada(s)/divididas en la misma zona.` : '';
+  mostrarResultadoImport(r, r.ok ? `${r.creadas} polígono(s) cargados de ${r.filasLeidas} fila(s).${fusionMsg}` : (r.error || 'Error al importar'));
   if (r.ok) cargarCenco();
 }
 

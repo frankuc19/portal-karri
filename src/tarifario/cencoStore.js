@@ -8,6 +8,7 @@ const ZONAS_FILE      = path.join(DATA_DIR, 'tarifario_cenco_zonas.json');
 const TARIFAS_FILE    = path.join(DATA_DIR, 'tarifario_cenco_tarifas.json');
 const ASEGURADOS_FILE = path.join(DATA_DIR, 'tarifario_cenco_asegurados.json');
 const SALAS_FILE      = path.join(DATA_DIR, 'tarifario_cenco_salas.json'); // { grupoPoligono: sala }
+const NOMBRES_FILE    = path.join(DATA_DIR, 'tarifario_cenco_nombres.json'); // { nombreNorm: nombreCanonico }
 
 // Mismo patrón de caché en memoria por archivo que turnosStore/altasStore —
 // evita releer y re-parsear desde disco en cada consulta de tarifa.
@@ -35,6 +36,64 @@ function normalizar(s) {
   return String(s || '').trim().toLowerCase()
     .normalize('NFD').replace(/[̀-ͯ]/g, '')
     .replace(/\s+/g, ' ');
+}
+
+// ─── Nombre canónico por zona ───────────────────────────────────────────────
+// Los archivos fuente traen la misma zona escrita de formas distintas (ej.
+// "Calera de Tango" vs "Calera de tango") — nombreNorm ya las trata como una
+// sola para cruzar tarifas, pero el texto que se muestra en pantalla también
+// tiene que ser uno solo. Se elige automáticamente la variante con tildes/Ñ y
+// mayúsculas de inicio de palabra correctas, y se recuerda para que una
+// importación futura con peor ortografía no la reemplace.
+function puntajeNombre(s) {
+  let p = 0;
+  if (/[áéíóúñÁÉÍÓÚÑ]/.test(s)) p += 10;
+  const conectores = new Set(['de', 'del', 'la', 'las', 'el', 'los', 'y']);
+  const palabras = s.trim().split(/\s+/);
+  const bienCapitalizado = palabras.every((w, i) => {
+    if (i > 0 && conectores.has(w.toLowerCase())) return w === w.toLowerCase();
+    return w.length > 0 && w[0] === w[0].toUpperCase();
+  });
+  if (bienCapitalizado) p += 5;
+  return p;
+}
+function mejorVariante(actual, candidata) {
+  if (!actual) return candidata;
+  if (actual === candidata) return actual;
+  const pa = puntajeNombre(actual), pc = puntajeNombre(candidata);
+  if (pc > pa) return candidata;
+  if (pc === pa && candidata.localeCompare(actual) < 0) return candidata; // desempate estable
+  return actual;
+}
+function getNombresCanonicos() { return readJson(NOMBRES_FILE, {}); }
+
+// Recorre zonas y tarifas ya guardadas, homogeneiza el nombre visible de cada
+// nombreNorm/destinoNorm a una sola forma (la mejor vista hasta ahora entre
+// ambos archivos) y reescribe lo que haya quedado desalineado. Se corre al
+// final de cada importación, sin importar el orden en que se suban los
+// archivos.
+function reconciliarNombres() {
+  const canon = getNombresCanonicos();
+  const zonas = getZonas();
+  const tarifas = getTarifas();
+
+  for (const z of zonas) canon[z.nombreNorm] = mejorVariante(canon[z.nombreNorm], z.nombre);
+  for (const t of tarifas) canon[t.destinoNorm] = mejorVariante(canon[t.destinoNorm], t.destino);
+
+  let zonasCambiaron = false, tarifasCambiaron = false;
+  for (const z of zonas) {
+    const mejor = canon[z.nombreNorm];
+    if (mejor && z.nombre !== mejor) { z.nombre = mejor; zonasCambiaron = true; }
+  }
+  for (const t of tarifas) {
+    const mejor = canon[t.destinoNorm];
+    if (mejor && t.destino !== mejor) { t.destino = mejor; tarifasCambiaron = true; }
+  }
+
+  writeJson(NOMBRES_FILE, canon);
+  if (zonasCambiaron) writeJson(ZONAS_FILE, zonas);
+  if (tarifasCambiaron) writeJson(TARIFAS_FILE, tarifas);
+  return canon;
 }
 
 // ─── WKT (Well-Known Text) ──────────────────────────────────────────────────
@@ -91,11 +150,15 @@ function getZonas() { return readJson(ZONAS_FILE, []); }
 
 // Reemplaza el set completo de zonas — cada importación representa "el
 // estado actual" del archivo maestro, no un incremental. Conserva el mapa de
-// salas ya configurado a mano.
+// salas ya configurado a mano. Si el archivo trae más de una fila para la
+// misma zona dentro del mismo polígono (pasa seguido: la geocerca se dibujó
+// en varios pedazos, o quedó una fila repetida a mano), se fusionan en una
+// sola zona con todos sus anillos — nunca deben quedar dos filas separadas
+// para lo mismo.
 function importarPoligonos(rows) {
   const mapaSalas = getMapaSalas();
   const salasConocidas = [...new Set(getTarifas().map(t => t.sala))];
-  const zonas = [];
+  const porGrupoNombre = new Map(); // "grupo|||nombreNorm" -> zona acumulada
   const errores = [];
 
   rows.forEach((row, i) => {
@@ -113,14 +176,23 @@ function importarPoligonos(rows) {
       return;
     }
 
-    const sala = mapaSalas[grupo] || inferirSala(grupo, salasConocidas) || null;
-    zonas.push({
-      id: crypto.randomUUID(),
-      grupo, sala, nombre, nombreNorm: normalizar(nombre),
-      rings, observacion: row['Observación'] || '',
-    });
+    const nombreNorm = normalizar(nombre);
+    const key = `${grupo}|||${nombreNorm}`;
+    let zona = porGrupoNombre.get(key);
+    if (!zona) {
+      const sala = mapaSalas[grupo] || inferirSala(grupo, salasConocidas) || null;
+      zona = { id: crypto.randomUUID(), grupo, sala, nombre, nombreNorm, rings: [], observacion: row['Observación'] || '' };
+      porGrupoNombre.set(key, zona);
+    }
+    // Solo agrega el anillo si no es idéntico a uno que ya tenía (evita que
+    // una fila repetida con el mismo dibujo duplique el anillo dos veces).
+    for (const ring of rings) {
+      const repetido = zona.rings.some(r => JSON.stringify(r) === JSON.stringify(ring));
+      if (!repetido) zona.rings.push(ring);
+    }
   });
 
+  const zonas = [...porGrupoNombre.values()];
   writeJson(ZONAS_FILE, zonas);
   // Registra en el mapa cualquier grupo nuevo que se haya podido inferir,
   // para que quede editable desde el panel aunque no se haya tocado a mano.
@@ -128,9 +200,13 @@ function importarPoligonos(rows) {
   for (const z of zonas) if (z.sala && !mapaActualizado[z.grupo]) mapaActualizado[z.grupo] = z.sala;
   writeJson(SALAS_FILE, mapaActualizado);
 
+  reconciliarNombres();
+
+  const filasFusionadas = rows.length - errores.length - zonas.length;
   return {
     creadas: zonas.length,
     filasLeidas: rows.length,
+    filasFusionadas: Math.max(0, filasFusionadas),
     errores,
     grupos: [...new Set(zonas.map(z => z.grupo))],
   };
@@ -202,6 +278,8 @@ function importarTarifas(rows) {
   writeJson(TARIFAS_FILE, tarifas);
   writeJson(ASEGURADOS_FILE, asegurados);
 
+  reconciliarNombres();
+
   return { zonasConTarifa: tarifas.length, salasConAsegurado: asegurados.length, filasLeidas: rows.length, errores };
 }
 
@@ -268,4 +346,5 @@ module.exports = {
   getZonas, importarPoligonos,
   getTarifas, getAsegurados, importarTarifas, actualizarTarifa,
   resolverTarifa,
+  getNombresCanonicos, reconciliarNombres,
 };
