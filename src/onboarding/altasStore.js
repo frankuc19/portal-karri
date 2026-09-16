@@ -9,15 +9,30 @@ const MAX_LOG_ENTRIES = 50;
 function ensureDir() {
   if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
 }
+
+// Cache en memoria por archivo — evita releer y re-parsear onboarding_altas.json
+// (varios miles de filas) desde disco en cada llamada. getAltaByRutKey() se
+// invoca una vez por Karrier al filtrar el Dashboard por rol, así que sin
+// esto cada cambio de filtro releía el archivo completo una vez por Karrier
+// activo. writeJson mantiene el caché al día, así que nunca queda desactualizado.
+const _jsonCache = new Map();
+
 function readJson(file, fallback) {
+  if (_jsonCache.has(file)) return _jsonCache.get(file);
   ensureDir();
-  if (!fs.existsSync(file)) return fallback;
-  try { return JSON.parse(fs.readFileSync(file, 'utf8')); }
-  catch { return fallback; }
+  let data = fallback;
+  if (fs.existsSync(file)) {
+    try { data = JSON.parse(fs.readFileSync(file, 'utf8')); }
+    catch { data = fallback; }
+  }
+  _jsonCache.set(file, data);
+  return data;
 }
+
 function writeJson(file, data) {
   ensureDir();
   fs.writeFileSync(file, JSON.stringify(data, null, 2));
+  _jsonCache.set(file, data);
 }
 
 // ─── Altas ──────────────────────────────────────────────────────────────────
