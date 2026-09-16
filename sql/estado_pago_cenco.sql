@@ -53,3 +53,11 @@ create index if not exists idx_detalle_pago_fecha     on detalle_pago (fecha);
 -- puede leer/escribir estas tablas usando la clave "anon" pública.
 alter table corridas_pago enable row level security;
 alter table detalle_pago  enable row level security;
+
+-- Tablas creadas por SQL directo (en vez del Table Editor) a veces no
+-- heredan el grant automático a service_role — sin este permiso explícito
+-- el backend recibe "permission denied for table ..." aunque la tabla
+-- exista y RLS esté bien configurado (service_role bypassa RLS, pero
+-- igual necesita el grant base de Postgres para tocar la tabla).
+grant all on corridas_pago to service_role;
+grant all on detalle_pago  to service_role;
