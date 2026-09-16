@@ -52,8 +52,8 @@ router.post('/tarifas/importar', upload.single('file'), (req, res) => {
 });
 
 router.put('/tarifas/:id', (req, res) => {
-  const { lunSab, domFestivo } = req.body || {};
-  const tarifa = store.actualizarTarifa(req.params.id, { lunSab, domFestivo });
+  const { lunSab, domFestivo, vigenciaInicio, vigenciaFin } = req.body || {};
+  const tarifa = store.actualizarTarifa(req.params.id, { lunSab, domFestivo, vigenciaInicio, vigenciaFin });
   if (!tarifa) return res.status(404).json({ ok: false, error: 'Tarifa no encontrada' });
   res.json({ ok: true, tarifa });
 });
