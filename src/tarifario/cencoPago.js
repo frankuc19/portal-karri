@@ -1,6 +1,7 @@
 const crypto = require('crypto');
 const { descargarPedidosPorRango } = require('./cencoApi');
 const cencoStore = require('./cencoStore');
+const { getSupabase } = require('./supabaseClient');
 
 // ─── Posiciones de columna en el CSV crudo de Cencosud ─────────────────────
 // Mismas posiciones que usaba el script de Apps Script (0-indexado), leídas
@@ -222,6 +223,98 @@ function calcularPagos(filas, { festivos = [] } = {}) {
   return { detalle, resumen };
 }
 
+// ─── Guardado en Supabase (historial, para consultar más adelante) ────────
+// Cada cálculo que termina bien queda guardado como una "corrida" nueva —
+// nunca se sobrescribe una corrida anterior para el mismo rango de fechas,
+// así queda registro de qué se calculó y cuándo aunque después se corrija
+// una tarifa y el número cambie. Si Supabase todavía no está configurado
+// (SUPABASE_URL/SUPABASE_SERVICE_ROLE_KEY), no falla el cálculo — solo
+// queda sin guardar y se avisa en el resultado.
+const TAMANO_LOTE_INSERT = 500; // fila por fila sería muy lento; de a 500 evita pegarle al límite de payload de Supabase
+
+async function guardarCorridaEnSupabase({ fechaInicio, fechaFin, festivos, detalle, resumen, errores }) {
+  const supabase = getSupabase();
+  if (!supabase) return { guardado: false, motivo: 'SUPABASE_NO_CONFIGURADO' };
+
+  const { data: corrida, error: errCorrida } = await supabase
+    .from('corridas_pago')
+    .insert({
+      cliente: 'cenco',
+      fecha_inicio: fechaInicio,
+      fecha_fin: fechaFin,
+      festivos,
+      total_pedidos: resumen.totalPedidos,
+      total_pago: resumen.totalPago,
+      resumen_por_sala: resumen.porSala,
+      sin_codigo_tienda: resumen.sinCodigoTienda,
+      sin_sala_asignada: resumen.sinSalaAsignada,
+      sin_coordenadas: resumen.sinCoordenadas,
+      fuera_de_todos_los_poligonos: resumen.fueraDeTodosLosPoligonos,
+      sin_tarifa_configurada: resumen.sinTarifaConfigurada,
+      fuera_de_vigencia: resumen.fueraDeVigencia,
+      errores_descarga: errores,
+    })
+    .select()
+    .single();
+
+  if (errCorrida) {
+    console.error('[Estado de Pago] Error guardando corrida en Supabase:', errCorrida.message);
+    return { guardado: false, motivo: errCorrida.message };
+  }
+
+  const filas = detalle.map(f => ({
+    corrida_id: corrida.id,
+    orden_id: f.ordenId,
+    fecha: f.fecha,
+    sala: f.sala,
+    zona: f.zona,
+    tipo_dia: f.tipoDia,
+    estado: f.estado,
+    tarifa_base: f.tarifaBase,
+    bono: f.bono,
+    multiplicador: f.multiplicador,
+    monto_pago_conductor: f.montoPagoConductor,
+    motivo: f.motivo,
+  }));
+
+  for (let i = 0; i < filas.length; i += TAMANO_LOTE_INSERT) {
+    const lote = filas.slice(i, i + TAMANO_LOTE_INSERT);
+    const { error: errDetalle } = await supabase.from('detalle_pago').insert(lote);
+    if (errDetalle) {
+      console.error('[Estado de Pago] Error guardando detalle en Supabase:', errDetalle.message);
+      return { guardado: false, corridaId: corrida.id, motivo: errDetalle.message };
+    }
+  }
+
+  return { guardado: true, corridaId: corrida.id };
+}
+
+async function obtenerHistorialCorridas({ desde, hasta } = {}) {
+  const supabase = getSupabase();
+  if (!supabase) return { error: 'SUPABASE_NO_CONFIGURADO' };
+
+  let query = supabase.from('corridas_pago').select('*').order('ejecutado_at', { ascending: false }).limit(200);
+  if (desde) query = query.gte('fecha_inicio', desde);
+  if (hasta) query = query.lte('fecha_fin', hasta);
+
+  const { data, error } = await query;
+  if (error) return { error: error.message };
+  return { corridas: data };
+}
+
+async function obtenerCorridaGuardada(corridaId) {
+  const supabase = getSupabase();
+  if (!supabase) return { error: 'SUPABASE_NO_CONFIGURADO' };
+
+  const { data: corrida, error: errCorrida } = await supabase.from('corridas_pago').select('*').eq('id', corridaId).single();
+  if (errCorrida) return { error: 'Corrida no encontrada.' };
+
+  const { data: detalle, error: errDetalle } = await supabase.from('detalle_pago').select('*').eq('corrida_id', corridaId);
+  if (errDetalle) return { error: errDetalle.message };
+
+  return { corrida, detalle };
+}
+
 // ─── Orquestación de jobs (transitorio — solo en memoria del proceso) ──────
 const JOBS = new Map(); // jobId -> { estado, resultado, creado }
 const JOB_TTL_MS = 2 * 60 * 60 * 1000; // 2 horas
@@ -251,7 +344,9 @@ function iniciarProcesoPago({ fechaInicio, fechaFin, festivos }) {
         job.estado = { ...progreso, errorFatal: null };
       });
       const { detalle, resumen } = calcularPagos(filas, { festivos });
-      job.resultado = { detalle, resumen, errores };
+      const guardado = await guardarCorridaEnSupabase({ fechaInicio, fechaFin, festivos, detalle, resumen, errores });
+      if (!guardado.guardado) console.warn('[Estado de Pago] No quedó guardado en Supabase:', guardado.motivo);
+      job.resultado = { detalle, resumen, errores, guardado };
       job.estado = { ...job.estado, finalizado: true };
     } catch (e) {
       job.estado = { ...job.estado, finalizado: true, errorFatal: e.message };
@@ -271,4 +366,7 @@ function obtenerResultadoJob(jobId) {
   return job && job.resultado ? job.resultado : null;
 }
 
-module.exports = { calcularPagos, iniciarProcesoPago, obtenerEstadoJob, obtenerResultadoJob };
+module.exports = {
+  calcularPagos, iniciarProcesoPago, obtenerEstadoJob, obtenerResultadoJob,
+  obtenerHistorialCorridas, obtenerCorridaGuardada,
+};

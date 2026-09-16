@@ -1,8 +1,21 @@
 const { Router } = require('express');
 const XLSX = require('xlsx');
-const { iniciarProcesoPago, obtenerEstadoJob, obtenerResultadoJob } = require('./cencoPago');
+const {
+  iniciarProcesoPago, obtenerEstadoJob, obtenerResultadoJob,
+  obtenerHistorialCorridas, obtenerCorridaGuardada,
+} = require('./cencoPago');
 
 const router = Router();
+
+function filasParaExcel(detalle) {
+  return detalle.map(f => ({
+    'ID Orden': f.ordenId ?? f.orden_id, Fecha: f.fecha, Sala: f.sala || '', Zona: f.zona || '',
+    'Tipo Día': f.tipoDia ?? f.tipo_dia ?? '', Estado: f.estado,
+    'Tarifa Base': f.tarifaBase ?? f.tarifa_base, Bono: f.bono,
+    Multiplicador: f.multiplicador, 'Pago Conductor': f.montoPagoConductor ?? f.monto_pago_conductor,
+    Motivo: f.motivo || '',
+  }));
+}
 
 router.post('/procesar', (req, res) => {
   const { fechaInicio, fechaFin, festivos } = req.body || {};
@@ -26,14 +39,8 @@ router.get('/resultado/:jobId', (req, res) => {
   if (!resultado) return res.status(404).json({ ok: false, error: 'Resultado no disponible todavía.' });
 
   if (req.query.formato === 'excel') {
-    const filasExcel = resultado.detalle.map(f => ({
-      'ID Orden': f.ordenId, Fecha: f.fecha, Sala: f.sala || '', Zona: f.zona || '',
-      'Tipo Día': f.tipoDia || '', Estado: f.estado, 'Tarifa Base': f.tarifaBase,
-      Bono: f.bono, Multiplicador: f.multiplicador, 'Pago Conductor': f.montoPagoConductor,
-      Motivo: f.motivo || '',
-    }));
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(filasExcel), 'Estado de Pago');
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(filasParaExcel(resultado.detalle)), 'Estado de Pago');
     const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', 'attachment; filename="estado_pago_cenco.xlsx"');
@@ -41,6 +48,30 @@ router.get('/resultado/:jobId', (req, res) => {
   }
 
   res.json({ ok: true, ...resultado });
+});
+
+// ─── Historial guardado en Supabase ────────────────────────────────────────
+router.get('/historial', async (req, res) => {
+  const { desde, hasta } = req.query;
+  const r = await obtenerHistorialCorridas({ desde, hasta });
+  if (r.error) return res.status(r.error === 'SUPABASE_NO_CONFIGURADO' ? 503 : 500).json({ ok: false, error: r.error });
+  res.json({ ok: true, corridas: r.corridas });
+});
+
+router.get('/historial/:corridaId', async (req, res) => {
+  const r = await obtenerCorridaGuardada(req.params.corridaId);
+  if (r.error) return res.status(r.error === 'SUPABASE_NO_CONFIGURADO' ? 503 : 404).json({ ok: false, error: r.error });
+
+  if (req.query.formato === 'excel') {
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(filasParaExcel(r.detalle)), 'Estado de Pago');
+    const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="estado_pago_cenco_${r.corrida.fecha_inicio}_${r.corrida.fecha_fin}.xlsx"`);
+    return res.send(buf);
+  }
+
+  res.json({ ok: true, corrida: r.corrida, detalle: r.detalle });
 });
 
 module.exports = router;

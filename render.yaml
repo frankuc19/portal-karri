@@ -17,6 +17,7 @@ services:
       # Las siguientes variables se configuran manualmente en el dashboard de Render:
       # GOOGLE_SHEET_ID, GOOGLE_SHEET_GID, GOOGLE_CREDENTIALS_B64
       # PANEL_USER, PANEL_PASSWORD, SESSION_SECRET
+      # SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY (historial de Estado de Pago — Settings > API del proyecto Supabase)
     disk:
       name: bot-data
       mountPath: /data

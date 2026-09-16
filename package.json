@@ -9,6 +9,7 @@
     "panel": "node panel/server.js"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.116.0",
     "@whiskeysockets/baileys": "^6.7.18",
     "csv-parser": "^3.0.0",
     "dotenv": "^16.4.5",
