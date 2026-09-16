@@ -36,10 +36,37 @@ const BONO_DESDE_FECHA_APAGADO = Date.UTC(2026, 2, 26) / 86400000; // días desd
 const NAVIDAD_INICIO = Date.UTC(2025, 11, 26) / 86400000;
 const NAVIDAD_FIN    = Date.UTC(2025, 11, 31) / 86400000;
 
-function parseFechaCsv(valor) {
+// Recupera año/mes/día/hora/minuto "de pared" (como se veían en la celda),
+// sin dejar que el huso horario del proceso los corra un día. Dos fuentes
+// posibles, cada una con su propia trampa:
+//  - Date de la librería xlsx (cellDates:true): SheetJS normaliza toda fecha
+//    a UTC aunque la celda no tenga huso — hay que leer sus getters UTC para
+//    recuperar el valor "ingenuo" real, no los getters locales.
+//  - string 'YYYY-MM-DD' (sin hora) del CSV: new Date(str) también lo
+//    interpreta como medianoche UTC — mismo problema, misma solución.
+// Un string con hora explícita ('...T10:00:00', sin 'Z') sí se parsea como
+// hora local de forma correcta, así que ahí se usan los getters normales.
+function componentesFecha(valor) {
   if (!valor) return null;
-  const f = new Date(valor);
-  return Number.isNaN(f.getTime()) ? null : f;
+  if (valor instanceof Date) {
+    if (Number.isNaN(valor.getTime())) return null;
+    return {
+      year: valor.getUTCFullYear(), month: valor.getUTCMonth(), day: valor.getUTCDate(),
+      hours: valor.getUTCHours(), minutes: valor.getUTCMinutes(),
+    };
+  }
+  const s = String(valor).trim();
+  const soloFecha = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (soloFecha) return { year: +soloFecha[1], month: +soloFecha[2] - 1, day: +soloFecha[3], hours: 0, minutes: 0 };
+  const d = new Date(s);
+  if (Number.isNaN(d.getTime())) return null;
+  return { year: d.getFullYear(), month: d.getMonth(), day: d.getDate(), hours: d.getHours(), minutes: d.getMinutes() };
+}
+
+// Reconstruye una fecha LOCAL a mediodía (evita bordes de cambio de horario)
+// a partir de los componentes ya normalizados.
+function fechaLocalDesdeComponentes(c) {
+  return c ? new Date(c.year, c.month, c.day, 12, 0, 0) : null;
 }
 
 function parseCoord(valor) {
@@ -48,7 +75,8 @@ function parseCoord(valor) {
 }
 
 function fechaISO(dateObj) {
-  return dateObj.toISOString().slice(0, 10);
+  const y = dateObj.getFullYear(), m = String(dateObj.getMonth() + 1).padStart(2, '0'), d = String(dateObj.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
 }
 
 function parseFestivos(lista) {
@@ -73,18 +101,18 @@ function esFinDeSemanaOFestivo(fecha, festivosSet) {
 // Bono de $300 por franja horaria de fin de semana / tarde en tiendas Jumbo —
 // portado tal cual de APLICAR_FORMULAS (usa colK para las ventanas de
 // excepción, colD/colC para las horas).
-function calcularBono(fechaPedido, horaDespachoRaw, horaEntregaRaw, local) {
-  if (!fechaPedido) return 0;
-  const fechaKint = Math.floor(fechaPedido.getTime() / 86400000);
+function calcularBono(fechaPedidoLocal, horaDespachoRaw, horaEntregaRaw, local) {
+  if (!fechaPedidoLocal) return 0;
+  const fechaKint = Math.floor(Date.UTC(fechaPedidoLocal.getFullYear(), fechaPedidoLocal.getMonth(), fechaPedidoLocal.getDate()) / 86400000);
   const navidad = fechaKint >= NAVIDAD_INICIO && fechaKint <= NAVIDAD_FIN;
   const desde26 = fechaKint >= BONO_DESDE_FECHA_APAGADO;
   if (navidad || desde26) return 0;
 
-  const diaSemK = fechaPedido.getDay();
-  const horaD = parseFechaCsv(horaDespachoRaw);
-  const horaC = parseFechaCsv(horaEntregaRaw);
-  const minutosD = horaD ? horaD.getHours() * 60 + horaD.getMinutes() : 0;
-  const minutosC = horaC ? horaC.getHours() * 60 + horaC.getMinutes() : 0;
+  const diaSemK = fechaPedidoLocal.getDay();
+  const cD = componentesFecha(horaDespachoRaw);
+  const cC = componentesFecha(horaEntregaRaw);
+  const minutosD = cD ? cD.hours * 60 + cD.minutes : 0;
+  const minutosC = cC ? cC.hours * 60 + cC.minutes : 0;
 
   const esFinde = diaSemK === 0 || diaSemK === 6;
   const esFranjaManana = esFinde && minutosD >= 450 && minutosD <= 600;
@@ -134,7 +162,7 @@ function calcularPagos(filas, { festivos = [] } = {}) {
     const local = row[COL.LOCAL] || '';
     const estado = row[COL.ESTADO] || '';
     const comuna = row[COL.COMUNA_DESTINO] || '';
-    const fechaPedido = parseFechaCsv(row[COL.FECHA_PEDIDO]);
+    const fechaPedido = fechaLocalDesdeComponentes(componentesFecha(row[COL.FECHA_PEDIDO]));
     const lat = parseCoord(row[COL.LAT]);
     const lng = parseCoord(row[COL.LNG]);
 

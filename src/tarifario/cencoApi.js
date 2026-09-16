@@ -1,4 +1,5 @@
 const { google } = require('googleapis');
+const XLSX = require('xlsx');
 const path = require('path');
 
 // ─── Token de Cencosud ──────────────────────────────────────────────────────
@@ -141,7 +142,19 @@ async function llamarAPICencoCsv(startMillis, endMillis, tokens) {
     }
   }
 
-  if (resp.status === 200 || resp.status === 201) return await resp.text();
+  if (resp.status === 200 || resp.status === 201) {
+    const contentType = resp.headers.get('content-type') || '';
+    const buffer = Buffer.from(await resp.arrayBuffer());
+    if (contentType.includes('text/csv') || contentType.includes('text/plain')) {
+      return { tipo: 'csv', datos: buffer.toString('utf8') };
+    }
+    // Cencosud a veces responde con el binario de un .xlsx real (application/
+    // vnd.openxmlformats-officedocument.spreadsheetml.sheet u octet-stream)
+    // aunque se pida Accept: text/csv — el script de Apps Script original lo
+    // manejaba subiendo el blob a Drive y convirtiéndolo; acá lo parseamos
+    // directo con la librería xlsx que ya usa el resto del Tarifario.
+    return { tipo: 'excel', datos: buffer };
+  }
   return null;
 }
 
@@ -168,6 +181,14 @@ function parsearCsv(csvText) {
     if (row.length > 0) rows.push(row);
   }
   return rows;
+}
+
+// Misma forma de salida que parsearCsv (array de arrays, fila 0 = encabezado)
+// pero leyendo un .xlsx binario real con la librería xlsx.
+function parsearExcelBuffer(buffer) {
+  const wb = XLSX.read(buffer, { type: 'buffer' });
+  const hoja = wb.Sheets[wb.SheetNames[0]];
+  return XLSX.utils.sheet_to_json(hoja, { header: 1, defval: '', raw: true, cellDates: true });
 }
 
 function normalizarOrdenId(rawId) {
@@ -206,10 +227,10 @@ async function descargarPedidosPorRango(fechaInicioISO, fechaFinISO, onProgreso)
     if (onProgreso) onProgreso({ diaActual: d + 1, totalDias, diaLabel, filasAcumuladas: filas.length, errores, finalizado: false });
 
     try {
-      const csvText = await llamarAPICencoCsv(startMs, endMs, tokens);
-      if (!csvText) { errores.push({ dia: diaLabel, motivo: 'La API de Cencosud no respondió con datos (revisa el token).' }); continue; }
+      const respuesta = await llamarAPICencoCsv(startMs, endMs, tokens);
+      if (!respuesta) { errores.push({ dia: diaLabel, motivo: 'La API de Cencosud no respondió con datos (revisa el token).' }); continue; }
 
-      const rows = parsearCsv(csvText);
+      const rows = respuesta.tipo === 'excel' ? parsearExcelBuffer(respuesta.datos) : parsearCsv(respuesta.datos);
       if (rows.length <= 1) continue;
       if (!header) header = rows[0];
 
