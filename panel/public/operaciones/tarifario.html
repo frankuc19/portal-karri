@@ -6,6 +6,8 @@
 <title>Karri — Tarifario Supermercados</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+<link href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" rel="stylesheet">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/styles.css">
 <style>
@@ -46,6 +48,20 @@
   /* ── Misc ── */
   .kpi-card:hover { border-color:rgba(15,23,22,.13); }
   .history-dot { width:6px;height:6px;border-radius:50%;background:#78fcd6;display:inline-block; }
+
+  /* ── Tabs de sección ── */
+  .top-tabs { display:flex;gap:4px;background:var(--bg-800);padding:0 24px;border-bottom:1px solid var(--border); }
+  .top-tab { padding:10px 14px;font-size:12.5px;font-weight:600;color:var(--text-muted);cursor:pointer;border-bottom:2px solid transparent; }
+  .top-tab.active { color:var(--electric);border-color:var(--electric); }
+
+  /* ── Cenco: mapa + tarifas por polígono ── */
+  #mapa-cenco { height:420px;border-radius:0 0 10px 10px; }
+  .cap-input { width:100px;background:#f4f5f6;border:1px solid rgba(15,23,22,.08);color:#12181a;border-radius:6px;padding:4px 6px;font-size:12px;text-align:center; }
+  .sala-select { background:#f4f5f6;border:1px solid rgba(15,23,22,.08);color:#12181a;border-radius:6px;padding:4px 8px;font-size:12px; }
+  .import-result { font-size:11.5px;border-radius:8px;padding:8px 12px;margin-top:8px; }
+  .import-result.ok { background:rgba(5,150,105,.1);color:#059669; }
+  .import-result.warn { background:rgba(180,83,9,.1);color:#b45309; }
+  .legend-dot { width:9px;height:9px;border-radius:50%;display:inline-block;margin-right:5px; }
 </style>
 </head>
 <body class="flex h-screen overflow-hidden">
@@ -73,8 +89,13 @@
     </div>
   </header>
 
+  <div class="top-tabs">
+    <div class="top-tab active" id="tab-btn-super" onclick="cambiarTab('super')">Supermercados</div>
+    <div class="top-tab" id="tab-btn-cenco" onclick="cambiarTab('cenco')">Cenco (por polígono)</div>
+  </div>
+
   <!-- Scrollable content -->
-  <div class="flex-1 overflow-y-auto" style="padding:20px 24px;display:flex;flex-direction:column;gap:20px;">
+  <div class="flex-1 overflow-y-auto" id="tab-super" style="padding:20px 24px;display:flex;flex-direction:column;gap:20px;">
 
     <!-- KPI Cards -->
     <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;">
@@ -127,6 +148,116 @@
         <div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px;">
           <span style="font-size:12px;color:var(--text-muted);" id="super-count-label">— registros</span>
           <div class="pagination" id="pg-super"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════ TAB CENCO (por polígono) ══════════════════ -->
+  <div class="flex-1 overflow-y-auto" id="tab-cenco" style="padding:20px 24px;display:none;flex-direction:column;gap:20px;">
+
+    <!-- Import bar -->
+    <div class="card" style="padding:16px 20px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;">
+      <div>
+        <p style="font-size:13px;font-weight:600;color:var(--text);">Datos maestros de Cenco</p>
+        <p style="font-size:11px;color:var(--text-muted);margin-top:2px;">Cada importación reemplaza el set completo (no es incremental) — vuelve a subir el archivo cuando cambien los polígonos o las tarifas.</p>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button class="btn-secondary" onclick="document.getElementById('input-poligonos').click()">
+          <i data-lucide="map" style="width:13px;height:13px;"></i> Importar polígonos
+        </button>
+        <input type="file" id="input-poligonos" accept=".xlsx,.xls" style="display:none" onchange="importarPoligonos(this)">
+        <button class="btn-secondary" onclick="document.getElementById('input-tarifas').click()">
+          <i data-lucide="dollar-sign" style="width:13px;height:13px;"></i> Importar tarifas
+        </button>
+        <input type="file" id="input-tarifas" accept=".xlsx,.xls" style="display:none" onchange="importarTarifasCenco(this)">
+      </div>
+    </div>
+    <p id="cenco-import-result" class="hidden"></p>
+
+    <!-- KPIs Cenco -->
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;">
+      <div class="card kpi-card" style="padding:16px 18px;">
+        <div class="label" style="margin-bottom:8px;">Polígonos cargados</div>
+        <div style="font-size:26px;font-weight:700;color:var(--electric);" id="cenco-kpi-zonas">—</div>
+      </div>
+      <div class="card kpi-card" style="padding:16px 18px;">
+        <div class="label" style="margin-bottom:8px;">Zonas con tarifa</div>
+        <div style="font-size:26px;font-weight:700;color:#2563eb;" id="cenco-kpi-tarifas">—</div>
+      </div>
+      <div class="card kpi-card" style="padding:16px 18px;">
+        <div class="label" style="margin-bottom:8px;">Zonas sin tarifa</div>
+        <div style="font-size:26px;font-weight:700;color:#dc2626;" id="cenco-kpi-sintarifa">—</div>
+      </div>
+      <div class="card kpi-card" style="padding:16px 18px;">
+        <div class="label" style="margin-bottom:8px;">Salas</div>
+        <div style="font-size:26px;font-weight:700;color:#12181a;" id="cenco-kpi-salas">—</div>
+      </div>
+    </div>
+
+    <!-- Configuración de salas -->
+    <div class="card" style="overflow:hidden;">
+      <div style="padding:16px 20px;border-bottom:1px solid rgba(15,23,22,.07);">
+        <p style="font-size:13px;font-weight:600;color:var(--text);">Configuración de Salas</p>
+        <p style="font-size:11px;color:var(--text-muted);margin-top:2px;">El archivo de polígonos agrupa por "Poligono" y no siempre coincide con el nombre de la Sala del archivo de tarifas — asigna cada grupo a su Sala una sola vez.</p>
+      </div>
+      <div style="padding:16px 20px;display:flex;flex-direction:column;gap:8px;" id="cenco-salas-config"></div>
+    </div>
+
+    <!-- Mapa -->
+    <div class="card" style="overflow:hidden;">
+      <div style="padding:16px 20px;border-bottom:1px solid rgba(15,23,22,.07);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;">
+        <div>
+          <p style="font-size:13px;font-weight:600;color:var(--text);">Mapa de polígonos</p>
+          <p style="font-size:11px;color:var(--text-muted);margin-top:2px;">Click en el mapa para probar a qué zona y tarifa correspondería un despacho ahí.</p>
+        </div>
+        <div id="cenco-leyenda" style="display:flex;gap:12px;font-size:11.5px;color:var(--text-muted);"></div>
+      </div>
+      <div id="mapa-cenco"></div>
+    </div>
+
+    <!-- Probar despacho -->
+    <div class="card" style="padding:16px 20px;">
+      <p style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:10px;">Probar un despacho</p>
+      <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;">
+        <div class="form-group"><p class="label mb-1">Sala</p><select class="input" id="prueba-sala" style="width:160px;"></select></div>
+        <div class="form-group"><p class="label mb-1">Latitud</p><input class="input" id="prueba-lat" style="width:130px;" placeholder="-33.60"></div>
+        <div class="form-group"><p class="label mb-1">Longitud</p><input class="input" id="prueba-lng" style="width:130px;" placeholder="-70.58"></div>
+        <div class="form-group"><p class="label mb-1">Fecha</p><input class="input" type="date" id="prueba-fecha" style="width:150px;"></div>
+        <button class="btn-primary" onclick="probarDespacho()"><i data-lucide="search" style="width:13px;height:13px;"></i> Resolver tarifa</button>
+      </div>
+      <div id="prueba-resultado" style="margin-top:12px;"></div>
+    </div>
+
+    <!-- Tabla de tarifas por zona -->
+    <div class="card" style="overflow:hidden;">
+      <div style="padding:16px 20px;border-bottom:1px solid rgba(15,23,22,.07);">
+        <p style="font-size:13px;font-weight:600;color:var(--text);">Tarifas por zona</p>
+      </div>
+      <div style="padding:0 20px 16px;">
+        <div class="tbl-wrap" style="margin-top:16px;">
+          <table>
+            <thead><tr>
+              <th>Sala</th><th>Zona / Destino</th><th>Lunes a Sábado</th><th>Domingo y Festivos</th><th>Polígono</th>
+            </tr></thead>
+            <tbody id="tbody-cenco-tarifas"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Asegurados por sala -->
+    <div class="card" style="overflow:hidden;">
+      <div style="padding:16px 20px;border-bottom:1px solid rgba(15,23,22,.07);">
+        <p style="font-size:13px;font-weight:600;color:var(--text);">Asegurado por Sala</p>
+        <p style="font-size:11px;color:var(--text-muted);margin-top:2px;">Monto mínimo garantizado por Sala (no depende del polígono) — se usa como referencia cuando un despacho cae fuera de todos los polígonos configurados.</p>
+      </div>
+      <div style="padding:0 20px 16px;">
+        <div class="tbl-wrap" style="margin-top:16px;">
+          <table>
+            <thead><tr><th>Sala</th><th>Lunes a Sábado</th><th>Domingo y Festivos</th></tr></thead>
+            <tbody id="tbody-cenco-asegurados"></tbody>
+          </table>
         </div>
       </div>
     </div>
@@ -496,6 +627,246 @@ function importFile(input) {
 renderTable();
 updateKPIs();
 lucide.createIcons();
+
+// ══════════════════════════════════════════════════════
+// TABS
+// ══════════════════════════════════════════════════════
+let cencoIniciado = false;
+function cambiarTab(tab) {
+  document.getElementById('tab-btn-super').classList.toggle('active', tab === 'super');
+  document.getElementById('tab-btn-cenco').classList.toggle('active', tab === 'cenco');
+  document.getElementById('tab-super').style.display = tab === 'super' ? 'flex' : 'none';
+  document.getElementById('tab-cenco').style.display = tab === 'cenco' ? 'flex' : 'none';
+  if (tab === 'cenco') {
+    if (!cencoIniciado) { cencoIniciado = true; initCenco(); }
+    else setTimeout(() => mapaCenco && mapaCenco.invalidateSize(), 50);
+  }
+}
+
+// ══════════════════════════════════════════════════════
+// CENCO — datos por polígono
+// ══════════════════════════════════════════════════════
+const COLOR_SALA = {}; // sala -> color, asignado dinámicamente
+const PALETA_SALAS = ['#1c9996', '#2563eb', '#d97706', '#7c3aed', '#dc2626', '#059669'];
+function colorDeSala(sala) {
+  if (!sala) return '#9ca3af';
+  if (!COLOR_SALA[sala]) COLOR_SALA[sala] = PALETA_SALAS[Object.keys(COLOR_SALA).length % PALETA_SALAS.length];
+  return COLOR_SALA[sala];
+}
+
+let cencoZonas = [];
+let cencoTarifas = [];
+let cencoAsegurados = [];
+let cencoMapaSalas = {};
+let mapaCenco = null;
+let capasZonas = [];
+
+async function initCenco() {
+  document.getElementById('prueba-fecha').value = new Date().toISOString().slice(0, 10);
+  mapaCenco = L.map('mapa-cenco').setView([-33.55, -70.6], 10);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '&copy; OpenStreetMap',
+    maxZoom: 18,
+  }).addTo(mapaCenco);
+  mapaCenco.on('click', (e) => {
+    document.getElementById('prueba-lat').value = e.latlng.lat.toFixed(6);
+    document.getElementById('prueba-lng').value = e.latlng.lng.toFixed(6);
+  });
+  await cargarCenco();
+}
+
+async function cargarCenco() {
+  const [rZonas, rTarifas, rSalas] = await Promise.all([
+    fetch('/api/tarifario/cenco/zonas').then(x => x.json()),
+    fetch('/api/tarifario/cenco/tarifas').then(x => x.json()),
+    fetch('/api/tarifario/cenco/salas').then(x => x.json()),
+  ]);
+  cencoZonas = rZonas.ok ? rZonas.zonas : [];
+  cencoTarifas = rTarifas.ok ? rTarifas.tarifas : [];
+  cencoAsegurados = rTarifas.ok ? rTarifas.asegurados : [];
+  cencoMapaSalas = rSalas.ok ? rSalas.mapa : {};
+
+  renderCencoKpis();
+  renderSalasConfig();
+  renderMapaCenco();
+  renderCencoTarifas();
+  renderCencoAsegurados();
+  renderPruebaSalaSelect();
+  if (window.lucide) lucide.createIcons();
+}
+
+function renderCencoKpis() {
+  const conTarifa = cencoZonas.filter(z => cencoTarifas.some(t => t.sala === z.sala && t.destinoNorm === z.nombreNorm)).length;
+  document.getElementById('cenco-kpi-zonas').textContent = cencoZonas.length;
+  document.getElementById('cenco-kpi-tarifas').textContent = conTarifa;
+  document.getElementById('cenco-kpi-sintarifa').textContent = cencoZonas.length - conTarifa;
+  document.getElementById('cenco-kpi-salas').textContent = new Set(Object.values(cencoMapaSalas)).size;
+}
+
+function salasConocidas() {
+  return [...new Set(cencoTarifas.map(t => t.sala))].sort();
+}
+
+function renderSalasConfig() {
+  const grupos = [...new Set(cencoZonas.map(z => z.grupo))];
+  const salas = salasConocidas();
+  const cont = document.getElementById('cenco-salas-config');
+  if (grupos.length === 0) {
+    cont.innerHTML = '<p style="font-size:12px;color:var(--text-faint);">Importa primero el archivo de polígonos.</p>';
+    return;
+  }
+  cont.innerHTML = grupos.map(g => {
+    const asignada = cencoMapaSalas[g] || '';
+    return `
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);">
+      <span style="font-size:12.5px;">${g} <span style="color:var(--text-faint);">(${cencoZonas.filter(z=>z.grupo===g).length} zonas)</span></span>
+      <select class="sala-select" onchange="asignarSala('${g.replace(/'/g,"\\'")}', this.value)">
+        <option value="">Sin asignar</option>
+        ${salas.map(s => `<option value="${s}" ${s===asignada?'selected':''}>${s}</option>`).join('')}
+      </select>
+    </div>`;
+  }).join('');
+}
+
+async function asignarSala(grupo, sala) {
+  if (!sala) return;
+  await fetch(`/api/tarifario/cenco/salas/${encodeURIComponent(grupo)}`, {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sala }),
+  }).then(x => x.json());
+  cargarCenco();
+}
+
+function renderMapaCenco() {
+  capasZonas.forEach(l => mapaCenco.removeLayer(l));
+  capasZonas = [];
+  const bounds = [];
+  for (const z of cencoZonas) {
+    const sala = z.sala || cencoMapaSalas[z.grupo] || null;
+    const color = colorDeSala(sala);
+    const tarifa = cencoTarifas.find(t => t.sala === sala && t.destinoNorm === z.nombreNorm);
+    for (const ring of z.rings) {
+      const latlngs = ring.map(([lng, lat]) => [lat, lng]);
+      const poly = L.polygon(latlngs, { color, weight: 1.5, fillOpacity: 0.25 }).addTo(mapaCenco);
+      const info = tarifa
+        ? `L-S: $${Number(tarifa.lunSab||0).toLocaleString('es-CL')} · Dom/Fest: $${Number(tarifa.domFestivo||0).toLocaleString('es-CL')}`
+        : '<span style="color:#dc2626;">Sin tarifa configurada</span>';
+      poly.bindPopup(`<b>${z.nombre}</b><br>Sala: ${sala || '<i>sin asignar</i>'}<br>${info}`);
+      capasZonas.push(poly);
+      latlngs.forEach(ll => bounds.push(ll));
+    }
+  }
+  if (bounds.length) mapaCenco.fitBounds(bounds, { padding: [16,16] });
+
+  const leyenda = document.getElementById('cenco-leyenda');
+  leyenda.innerHTML = salasConocidas().map(s => `<span><span class="legend-dot" style="background:${colorDeSala(s)};"></span>${s}</span>`).join('');
+}
+
+function renderCencoTarifas() {
+  const tbody = document.getElementById('tbody-cenco-tarifas');
+  if (cencoTarifas.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;color:var(--text-faint);padding:24px;">Importa el archivo de tarifas para ver esta tabla.</td></tr>`;
+    return;
+  }
+  const zonaPorSalaDestino = new Map(cencoZonas.map(z => [`${z.sala}|||${z.nombreNorm}`, z]));
+  tbody.innerHTML = [...cencoTarifas].sort((a,b) => (a.sala+a.destino).localeCompare(b.sala+b.destino)).map(t => {
+    const zona = zonaPorSalaDestino.get(`${t.sala}|||${t.destinoNorm}`);
+    return `
+    <tr>
+      <td>${t.sala}</td>
+      <td>${t.destino}</td>
+      <td><input class="cap-input" type="number" min="0" value="${t.lunSab ?? ''}" onchange="editarTarifaCenco('${t.id}','lunSab',this.value)"></td>
+      <td><input class="cap-input" type="number" min="0" value="${t.domFestivo ?? ''}" onchange="editarTarifaCenco('${t.id}','domFestivo',this.value)"></td>
+      <td style="color:var(--text-muted);font-size:11px;">${zona ? zona.grupo : '<span style="color:#dc2626;">sin polígono</span>'}</td>
+    </tr>`;
+  }).join('');
+}
+
+async function editarTarifaCenco(id, campo, valor) {
+  await fetch(`/api/tarifario/cenco/tarifas/${id}`, {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ [campo]: valor === '' ? null : Number(valor) }),
+  }).then(x => x.json());
+  cargarCenco();
+}
+
+function renderCencoAsegurados() {
+  const tbody = document.getElementById('tbody-cenco-asegurados');
+  if (cencoAsegurados.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="3" style="text-align:center;color:var(--text-faint);padding:24px;">Importa el archivo de tarifas para ver esta tabla.</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = cencoAsegurados.map(a => `
+    <tr>
+      <td>${a.sala}</td>
+      <td class="td-mono">${a.lunSab != null ? pesos(a.lunSab) : '—'}</td>
+      <td class="td-mono">${a.domFestivo != null ? pesos(a.domFestivo) : '—'}</td>
+    </tr>`).join('');
+}
+
+function renderPruebaSalaSelect() {
+  const sel = document.getElementById('prueba-sala');
+  const actual = sel.value;
+  sel.innerHTML = salasConocidas().map(s => `<option value="${s}">${s}</option>`).join('');
+  if (actual) sel.value = actual;
+}
+
+async function probarDespacho() {
+  const sala = document.getElementById('prueba-sala').value;
+  const lat = document.getElementById('prueba-lat').value;
+  const lng = document.getElementById('prueba-lng').value;
+  const fecha = document.getElementById('prueba-fecha').value;
+  const cont = document.getElementById('prueba-resultado');
+  if (!sala || !lat || !lng) { cont.innerHTML = '<p style="color:#dc2626;font-size:12px;">Completa sala, latitud y longitud.</p>'; return; }
+
+  const params = new URLSearchParams({ sala, lat, lng, fecha });
+  const r = await fetch(`/api/tarifario/cenco/resolver?${params}`).then(x => x.json());
+  if (!r.ok) { cont.innerHTML = `<p style="color:#dc2626;font-size:12px;">${r.motivo || 'No se pudo resolver'}</p>`; return; }
+
+  if (r.dentroDePoligono && r.monto != null) {
+    cont.innerHTML = `<div class="import-result ok">✓ Cae en la zona <b>${r.zona}</b> (${r.esDomFestivo ? 'Domingo/Festivo' : 'Lunes a Sábado'}) → tarifa a pagar: <b>${pesos(r.monto)}</b></div>`;
+  } else if (r.dentroDePoligono) {
+    cont.innerHTML = `<div class="import-result warn">La zona <b>${r.zona}</b> no tiene tarifa configurada todavía para esta Sala.</div>`;
+  } else {
+    cont.innerHTML = `<div class="import-result warn">No cae dentro de ningún polígono configurado para ${sala}.${r.asegurado != null ? ` Se usaría el Asegurado de referencia: <b>${pesos(r.asegurado)}</b>.` : ''}</div>`;
+  }
+}
+
+// ══════════════════════════════════════════════════════
+// CENCO — importación de Excel
+// ══════════════════════════════════════════════════════
+async function importarPoligonos(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const form = new FormData();
+  form.append('file', file);
+  const r = await fetch('/api/tarifario/cenco/zonas/importar', { method: 'POST', body: form }).then(x => x.json());
+  input.value = '';
+  mostrarResultadoImport(r, r.ok ? `${r.creadas} polígono(s) cargados de ${r.filasLeidas} fila(s).` : (r.error || 'Error al importar'));
+  if (r.ok) cargarCenco();
+}
+
+async function importarTarifasCenco(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const form = new FormData();
+  form.append('file', file);
+  const r = await fetch('/api/tarifario/cenco/tarifas/importar', { method: 'POST', body: form }).then(x => x.json());
+  input.value = '';
+  mostrarResultadoImport(r, r.ok ? `${r.zonasConTarifa} zona(s) con tarifa y ${r.salasConAsegurado} sala(s) con Asegurado, de ${r.filasLeidas} fila(s).` : (r.error || 'Error al importar'));
+  if (r.ok) cargarCenco();
+}
+
+function mostrarResultadoImport(r, resumen) {
+  const el = document.getElementById('cenco-import-result');
+  el.classList.remove('hidden');
+  const tieneErrores = r.errores && r.errores.length > 0;
+  el.className = `import-result ${tieneErrores ? 'warn' : 'ok'}`;
+  let html = resumen;
+  if (tieneErrores) {
+    html += '<br>' + r.errores.slice(0, 8).map(e => `Fila ${e.fila}: ${e.motivo}`).join('<br>');
+    if (r.errores.length > 8) html += `<br>… y ${r.errores.length - 8} más.`;
+  }
+  el.innerHTML = html;
+}
 </script>
 </body>
 </html>

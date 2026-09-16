@@ -34,6 +34,8 @@ const altasRoutes = require('../src/onboarding/altasRoutes');
 const altasStore  = require('../src/onboarding/altasStore');
 const { sincronizarAltasOB } = require('../src/onboarding/altasSync');
 
+const cencoRoutes = require('../src/tarifario/cencoRoutes');
+
 const DELAY_MS   = 5000;
 const PORT       = process.env.PORT || 3000;
 const USA_SHEETS = !!process.env.GOOGLE_SHEET_ID;
@@ -470,6 +472,9 @@ app.use('/api/ob/altas',     requireAuthApi, altasRoutes);
 
 // ─── API: turnos (administración, solo panel) ─────────────────────────────────
 app.use('/api/turnos/admin', requireAuthApi, turnosAdminRoutes);
+
+// ─── API: tarifario Cenco (por polígono) ──────────────────────────────────────
+app.use('/api/tarifario/cenco', requireAuthApi, cencoRoutes);
 
 // ─── Estado global ────────────────────────────────────────────────────────────
 let waClient           = null;
