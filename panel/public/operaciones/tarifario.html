@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Karri — Tarifario Supermercados</title>
+<title>Karri — Tarifario Cenco</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
 <link href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" rel="stylesheet">
@@ -35,13 +35,6 @@
   .btn-danger-ghost { background:none;color:rgba(220,38,38,.7);font-size:12px;padding:5px 8px;border-radius:6px;border:none;cursor:pointer;display:inline-flex;align-items:center;gap:5px; }
   .btn-danger-ghost:hover { background:rgba(220,38,38,.1);color:#dc2626; }
 
-  /* ── Pagination ── */
-  .pagination { display:flex;align-items:center;gap:4px; }
-  .pg-btn { min-width:30px;height:30px;border-radius:6px;border:1px solid rgba(15,23,22,.07);background:#f1f3f2;color:rgba(15,23,22,.5);font-size:12px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center; }
-  .pg-btn:hover,.pg-btn.active { background:#f4f5f6;color:#12181a; }
-  .pg-btn.active { color:#059669;border-color:rgba(5,150,105,.3); }
-  .pg-btn:disabled { opacity:.35;cursor:default; }
-
   /* ── Form layout ── */
   .form-row { display:grid;grid-template-columns:1fr 1fr;gap:14px; }
   .form-group { display:flex;flex-direction:column;gap:6px; }
@@ -49,12 +42,6 @@
 
   /* ── Misc ── */
   .kpi-card:hover { border-color:rgba(15,23,22,.13); }
-  .history-dot { width:6px;height:6px;border-radius:50%;background:#78fcd6;display:inline-block; }
-
-  /* ── Tabs de sección ── */
-  .top-tabs { display:flex;gap:4px;background:var(--bg-800);padding:0 24px;border-bottom:1px solid var(--border); }
-  .top-tab { padding:10px 14px;font-size:12.5px;font-weight:600;color:var(--text-muted);cursor:pointer;border-bottom:2px solid transparent; }
-  .top-tab.active { color:var(--electric);border-color:var(--electric); }
 
   /* ── Cenco: mapa + tarifas por polígono ── */
   #mapa-cenco { height:420px;border-radius:0 0 10px 10px; }
@@ -72,91 +59,13 @@
 
 <div class="flex-1 flex flex-col overflow-hidden">
   <!-- Header -->
-  <header style="background:var(--bg-800);border-bottom:1px solid var(--border);padding:14px 24px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;">
-    <div>
-      <h1 style="font-size:16px;font-weight:700;color:var(--text);">Administrador de Tarifario</h1>
-      <p style="font-size:11px;color:var(--text-muted);margin-top:2px;">Supermercados</p>
-    </div>
-    <div style="display:flex;gap:8px;align-items:center;">
-      <button class="btn-secondary" onclick="exportExcel()">
-        <i data-lucide="download" style="width:13px;height:13px;"></i> Exportar Excel
-      </button>
-      <button class="btn-secondary" onclick="document.getElementById('import-file').click()">
-        <i data-lucide="upload" style="width:13px;height:13px;"></i> Importar
-      </button>
-      <input type="file" id="import-file" accept=".xlsx,.csv" style="display:none" onchange="importFile(this)">
-      <button class="btn-primary" onclick="openModal()">
-        <i data-lucide="plus" style="width:14px;height:14px;"></i> Nueva Tarifa
-      </button>
-    </div>
+  <header style="background:var(--bg-800);border-bottom:1px solid var(--border);padding:14px 24px;flex-shrink:0;">
+    <h1 style="font-size:16px;font-weight:700;color:var(--text);">Administrador de Tarifario</h1>
+    <p style="font-size:11px;color:var(--text-muted);margin-top:2px;">Cenco (por polígono)</p>
   </header>
 
-  <div class="top-tabs">
-    <div class="top-tab active" id="tab-btn-super" onclick="cambiarTab('super')">Supermercados</div>
-    <div class="top-tab" id="tab-btn-cenco" onclick="cambiarTab('cenco')">Cenco (por polígono)</div>
-  </div>
-
-  <!-- Scrollable content -->
-  <div class="flex-1 overflow-y-auto" id="tab-super" style="padding:20px 24px;display:flex;flex-direction:column;gap:20px;">
-
-    <!-- KPI Cards -->
-    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;">
-      <div class="card kpi-card" style="padding:16px 18px;cursor:default;transition:border-color .15s;">
-        <div class="label" style="margin-bottom:8px;">Tarifas Activas</div>
-        <div style="font-size:26px;font-weight:700;color:var(--electric);" id="kpi-activas">—</div>
-        <div style="font-size:11px;color:var(--text-muted);margin-top:3px;">convenios vigentes</div>
-      </div>
-      <div class="card kpi-card" style="padding:16px 18px;cursor:default;transition:border-color .15s;">
-        <div class="label" style="margin-bottom:8px;">Convenios Distintos</div>
-        <div style="font-size:26px;font-weight:700;color:#2563eb;" id="kpi-convenios">—</div>
-        <div style="font-size:11px;color:var(--text-muted);margin-top:3px;">supermercados con tarifa</div>
-      </div>
-      <div class="card kpi-card" style="padding:16px 18px;cursor:default;transition:border-color .15s;">
-        <div class="label" style="margin-bottom:8px;">Tarifas Vencidas</div>
-        <div style="font-size:26px;font-weight:700;color:#dc2626;" id="kpi-vencidas">—</div>
-        <div style="font-size:11px;color:var(--text-muted);margin-top:3px;">requieren renovación</div>
-      </div>
-    </div>
-
-    <!-- Tabla Supermercados -->
-    <div class="card" style="overflow:hidden;">
-      <div style="display:flex;gap:8px;align-items:center;padding:16px 20px;border-bottom:1px solid rgba(15,23,22,.07);flex-wrap:wrap;">
-        <div style="position:relative;flex:1;min-width:200px;">
-          <i data-lucide="search" style="position:absolute;left:9px;top:50%;transform:translateY(-50%);width:13px;height:13px;color:var(--text-faint);"></i>
-          <input class="input" id="super-search" placeholder="Buscar convenio, estación, rol..." style="padding-left:30px;" oninput="renderTable()">
-        </div>
-        <select class="input" id="super-filter-rol" style="width:140px;" onchange="renderTable()">
-          <option value="">Rol</option>
-          <option>Picker</option><option>Shopper</option><option>Driver</option>
-        </select>
-        <select class="input" id="super-filter-estado" style="width:130px;" onchange="renderTable()">
-          <option value="">Estado</option>
-          <option>activo</option><option>inactivo</option><option>vencido</option>
-        </select>
-      </div>
-      <div style="padding:0 20px 16px;">
-        <div class="tbl-wrap" style="margin-top:16px;">
-          <table id="tbl-super">
-            <thead>
-              <tr>
-                <th>ID</th><th>Convenio</th><th>Estación</th><th>Rol</th>
-                <th>Asegurado</th><th>M. Pedido</th><th>M. Bulto</th>
-                <th>Vigencia</th><th>Estado</th><th>Acciones</th>
-              </tr>
-            </thead>
-            <tbody id="tbody-super"></tbody>
-          </table>
-        </div>
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px;">
-          <span style="font-size:12px;color:var(--text-muted);" id="super-count-label">— registros</span>
-          <div class="pagination" id="pg-super"></div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- ══════════════════ TAB CENCO (por polígono) ══════════════════ -->
-  <div class="flex-1 overflow-y-auto" id="tab-cenco" style="padding:20px 24px;display:none;flex-direction:column;gap:20px;">
+  <!-- ══════════════════ CENCO (por polígono) ══════════════════ -->
+  <div class="flex-1 overflow-y-auto" id="tab-cenco" style="padding:20px 24px;display:flex;flex-direction:column;gap:20px;">
 
     <!-- Import bar -->
     <div class="card" style="padding:16px 20px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;">
@@ -251,9 +160,14 @@
 
     <!-- Tabla de tarifas por zona -->
     <div class="card" style="overflow:hidden;">
-      <div style="padding:16px 20px;border-bottom:1px solid rgba(15,23,22,.07);">
-        <p style="font-size:13px;font-weight:600;color:var(--text);">Tarifas por zona</p>
-        <p style="font-size:11px;color:var(--text-muted);margin-top:2px;">Click en una Sala para expandir sus zonas. Vigencia vacía en "Hasta" = indeterminado.</p>
+      <div style="padding:16px 20px;border-bottom:1px solid rgba(15,23,22,.07);display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">
+        <div>
+          <p style="font-size:13px;font-weight:600;color:var(--text);">Tarifas por zona</p>
+          <p style="font-size:11px;color:var(--text-muted);margin-top:2px;">Click en una Sala para expandir sus zonas. Vigencia vacía en "Hasta" = indeterminado.</p>
+        </div>
+        <button class="btn-primary" onclick="abrirModalNuevaTarifa()">
+          <i data-lucide="plus" style="width:13px;height:13px;"></i> Nueva Tarifa
+        </button>
       </div>
       <div style="padding:0 20px 16px;">
         <div class="tbl-wrap" style="margin-top:16px;">
@@ -286,95 +200,59 @@
 </div>
 
 <!-- ====================================================
-     MODAL NUEVA / EDITAR TARIFA
+     MODAL NUEVA TARIFA (para una geocerca que ya existe)
 ===================================================== -->
-<div id="modal-tarifa" class="modal-bg" style="display:none;" onclick="if(event.target===this)closeModal()">
-  <div class="modal">
+<div id="modal-nueva-tarifa" class="modal-bg" style="display:none;" onclick="if(event.target===this)cerrarModalNuevaTarifa()">
+  <div class="modal" style="max-width:460px;">
     <div class="modal-header">
       <div>
-        <div style="font-size:15px;font-weight:700;" id="modal-title">Nueva Tarifa</div>
-        <div style="font-size:12px;color:var(--text-muted);margin-top:2px;">Supermercados</div>
+        <div style="font-size:15px;font-weight:700;">Nueva tarifa</div>
+        <div style="font-size:12px;color:var(--text-muted);margin-top:2px;">Cenco (por polígono)</div>
       </div>
-      <button class="btn-ghost" onclick="closeModal()"><i data-lucide="x" style="width:15px;height:15px;"></i></button>
+      <button class="btn-ghost" onclick="cerrarModalNuevaTarifa()"><i data-lucide="x" style="width:15px;height:15px;"></i></button>
     </div>
     <div class="modal-body">
-      <!-- Identificación -->
-      <div class="form-section">Identificación</div>
+      <div class="form-section">Geocerca</div>
       <div class="form-row" style="margin-bottom:14px;">
         <div class="form-group">
-          <label class="label">ID Tarifa</label>
-          <input class="input" id="f-id" placeholder="ej. SP012" readonly style="opacity:.5;">
+          <label class="label">Sala</label>
+          <select class="input" id="nt-sala" onchange="poblarZonasNuevaTarifa()"></select>
         </div>
         <div class="form-group">
-          <label class="label">Convenio</label>
-          <input class="input" id="f-cliente" placeholder="ej. Tottus">
+          <label class="label">Geocerca</label>
+          <select class="input" id="nt-zona"></select>
         </div>
       </div>
 
-      <!-- Configuración -->
-      <div class="form-section">Configuración</div>
+      <div class="form-section">Tarifa</div>
       <div class="form-row" style="margin-bottom:14px;">
         <div class="form-group">
-          <label class="label">Estación / Sala</label>
-          <input class="input" id="f-estacion" placeholder="ej. Tottus Kennedy">
+          <label class="label">Lunes a Sábado</label>
+          <input class="input" type="number" min="0" id="nt-lunsab" placeholder="3050">
         </div>
         <div class="form-group">
-          <label class="label">Rol</label>
-          <select class="input" id="f-rol">
-            <option>Picker</option><option>Shopper</option><option>Driver</option>
-          </select>
+          <label class="label">Domingo y Festivos</label>
+          <input class="input" type="number" min="0" id="nt-domfest" placeholder="3150">
         </div>
       </div>
-      <div class="form-row" style="margin-bottom:14px;">
+      <div class="form-row">
         <div class="form-group">
-          <label class="label">Monto Asegurado (CLP)</label>
-          <input class="input" type="number" id="f-asegurado" placeholder="8500">
+          <label class="label">Vigencia desde</label>
+          <input class="input" type="date" id="nt-vigencia-inicio">
         </div>
         <div class="form-group">
-          <label class="label">Monto por Pedido</label>
-          <input class="input" type="number" id="f-m-pedido" placeholder="1200">
-        </div>
-      </div>
-      <div class="form-row" style="margin-bottom:14px;">
-        <div class="form-group">
-          <label class="label">Monto por Bulto</label>
-          <input class="input" type="number" id="f-m-bulto" placeholder="120">
-        </div>
-        <div class="form-group"></div>
-      </div>
-
-      <!-- Vigencia -->
-      <div class="form-section" style="margin-top:4px;">Vigencia</div>
-      <div class="form-row" style="margin-bottom:14px;">
-        <div class="form-group">
-          <label class="label">Fecha Inicio</label>
-          <input class="input" type="date" id="f-vigencia-inicio">
-        </div>
-        <div class="form-group">
-          <label class="label">Fecha Fin</label>
-          <input class="input" type="date" id="f-vigencia-fin">
+          <label class="label">Vigencia hasta (vacío = indeterminado)</label>
+          <input class="input" type="date" id="nt-vigencia-fin">
         </div>
       </div>
+      <div id="nt-mensaje" class="hidden"></div>
     </div>
     <div class="modal-footer">
-      <button class="btn-secondary" onclick="closeModal()">Cancelar</button>
-      <button class="btn-primary" onclick="saveTarifa()">
+      <button class="btn-secondary" onclick="cerrarModalNuevaTarifa()">Cancelar</button>
+      <button class="btn-primary" onclick="guardarNuevaTarifaDesdeModal()">
         <i data-lucide="save" style="width:13px;height:13px;"></i> Guardar Tarifa
       </button>
     </div>
-  </div>
-</div>
-
-<!-- ====================================================
-     MODAL HISTORIAL
-===================================================== -->
-<div id="modal-historial" class="modal-bg" style="display:none;" onclick="if(event.target===this)closeHistorial()">
-  <div class="modal" style="max-width:480px;">
-    <div class="modal-header">
-      <div style="font-size:15px;font-weight:700;">Historial de cambios</div>
-      <button class="btn-ghost" onclick="closeHistorial()"><i data-lucide="x" style="width:15px;height:15px;"></i></button>
-    </div>
-    <div class="modal-body" id="historial-body" style="padding:16px 20px;"></div>
   </div>
 </div>
 
@@ -440,287 +318,15 @@
 <script>
 window.initSidebar('op-tarifario');
 
-// ══════════════════════════════════════════════════════
-// MOCK DATA
-// ══════════════════════════════════════════════════════
-const MOCK = {
-  supermercados: [
-    { id:'SP001', convenio:'Tottus', estacion:'Tottus Kennedy', rol:'Picker', asegurado:9000, m_pedido:1100, m_bulto:110, vigencia_inicio:'2026-01-01', vigencia_fin:'2026-12-31', estado:'activo', _hist:[{fecha:'2025-12-15',accion:'Creación',usuario:'admin'}] },
-    { id:'SP002', convenio:'Tottus', estacion:'Tottus Kennedy', rol:'Shopper', asegurado:8500, m_pedido:900, m_bulto:95, vigencia_inicio:'2026-01-01', vigencia_fin:'2026-12-31', estado:'activo', _hist:[{fecha:'2025-12-15',accion:'Creación',usuario:'admin'}] },
-    { id:'SP003', convenio:'Tottus', estacion:'Tottus Maipú', rol:'Driver', asegurado:10000, m_pedido:1300, m_bulto:130, vigencia_inicio:'2026-01-01', vigencia_fin:'2026-12-31', estado:'activo', _hist:[{fecha:'2025-12-15',accion:'Creación',usuario:'admin'}] },
-    { id:'SP004', convenio:'Jumbo', estacion:'Jumbo Providencia', rol:'Picker', asegurado:9200, m_pedido:1150, m_bulto:115, vigencia_inicio:'2026-02-01', vigencia_fin:'2026-12-31', estado:'activo', _hist:[{fecha:'2026-01-20',accion:'Creación',usuario:'admin'}] },
-    { id:'SP005', convenio:'Jumbo', estacion:'Jumbo Las Condes', rol:'Shopper', asegurado:8800, m_pedido:1000, m_bulto:100, vigencia_inicio:'2026-02-01', vigencia_fin:'2026-12-31', estado:'activo', _hist:[{fecha:'2026-01-20',accion:'Creación',usuario:'admin'}] },
-    { id:'SP006', convenio:'Unimarc', estacion:'Unimarc Ñuñoa', rol:'Picker', asegurado:8000, m_pedido:950, m_bulto:90, vigencia_inicio:'2025-09-01', vigencia_fin:'2025-12-31', estado:'vencido', _hist:[{fecha:'2025-08-10',accion:'Creación',usuario:'admin'}] },
-    { id:'SP007', convenio:'Alvi', estacion:'Alvi Pudahuel', rol:'Driver', asegurado:11000, m_pedido:1500, m_bulto:150, vigencia_inicio:'2026-03-01', vigencia_fin:'2026-12-31', estado:'activo', _hist:[{fecha:'2026-02-20',accion:'Creación',usuario:'admin'}] },
-  ],
-};
-
-// ══════════════════════════════════════════════════════
-// STATE
-// ══════════════════════════════════════════════════════
-const PAGE_SIZE = 8;
-let currentPage = 1;
-const currentData = { super: [...MOCK.supermercados] };
-let editingId = null;
-
-// ══════════════════════════════════════════════════════
-// FILTER + RENDER
-// ══════════════════════════════════════════════════════
-function getFiltered() {
-  const search = (document.getElementById('super-search')?.value || '').toLowerCase();
-  const rol = document.getElementById('super-filter-rol')?.value;
-  const est = document.getElementById('super-filter-estado')?.value;
-  let rows = [...currentData.super];
-  if (rol) rows = rows.filter(r => r.rol === rol);
-  if (est) rows = rows.filter(r => r.estado === est);
-  if (search) rows = rows.filter(r =>
-    [r.id, r.convenio, r.estacion, r.rol].join(' ').toLowerCase().includes(search));
-  return rows;
-}
-
-function estadoBadge(e) {
-  const map = { activo:'badge-green', inactivo:'badge-yellow', vencido:'badge-red' };
-  const labels = { activo:'Activo', inactivo:'Inactivo', vencido:'Vencido' };
-  return `<span class="badge ${map[e]||'badge-blue'}">${labels[e]||e}</span>`;
-}
-
 function pesos(n) {
   return '$' + Number(n).toLocaleString('es-CL');
-}
-
-function renderTable() {
-  const filtered = getFiltered();
-  currentPage = Math.min(currentPage, Math.ceil(filtered.length / PAGE_SIZE) || 1);
-  const start = (currentPage - 1) * PAGE_SIZE;
-  const page  = filtered.slice(start, start + PAGE_SIZE);
-
-  document.getElementById('super-count-label').textContent =
-    `${filtered.length} registro${filtered.length !== 1 ? 's' : ''}`;
-
-  document.getElementById('tbody-super').innerHTML = page.map(r => `
-    <tr>
-      <td class="td-mono" style="color:var(--electric);font-size:11px;">${r.id}</td>
-      <td style="font-weight:500;">${r.convenio}</td>
-      <td style="color:var(--text-muted);">${r.estacion}</td>
-      <td><span class="badge badge-blue">${r.rol}</span></td>
-      <td class="td-mono">${pesos(r.asegurado)}</td>
-      <td class="td-mono">${pesos(r.m_pedido)}</td>
-      <td class="td-mono">${pesos(r.m_bulto)}</td>
-      <td style="color:var(--text-muted);font-size:11px;">${r.vigencia_inicio} → ${r.vigencia_fin}</td>
-      <td>${estadoBadge(r.estado)}</td>
-      <td>${accionBtn(r.id)}</td>
-    </tr>`).join('');
-
-  renderPagination(filtered.length);
-  lucide.createIcons({ el: document.getElementById('tbody-super') });
-}
-
-function accionBtn(id) {
-  return `
-    <div style="display:flex;gap:2px;">
-      <button class="btn-ghost" title="Editar" onclick="editRow('${id}')">
-        <i data-lucide="edit-2" style="width:13px;height:13px;"></i>
-      </button>
-      <button class="btn-ghost" title="Duplicar" onclick="duplicateRow('${id}')">
-        <i data-lucide="copy" style="width:13px;height:13px;"></i>
-      </button>
-      <button class="btn-ghost" title="Historial" onclick="showHistorial('${id}')">
-        <i data-lucide="clock" style="width:13px;height:13px;"></i>
-      </button>
-      <button class="btn-danger-ghost" title="Eliminar" onclick="deleteRow('${id}')">
-        <i data-lucide="trash-2" style="width:13px;height:13px;"></i>
-      </button>
-    </div>`;
-}
-
-function renderPagination(total) {
-  const pages = Math.ceil(total / PAGE_SIZE) || 1;
-  const cur   = currentPage;
-  const pg    = document.getElementById('pg-super');
-  let html = `<button class="pg-btn" onclick="goPage(${cur-1})" ${cur<=1?'disabled':''}>‹</button>`;
-  for (let i = 1; i <= pages; i++) {
-    if (pages > 7 && i > 2 && i < pages - 1 && Math.abs(i - cur) > 1) {
-      if (i === 3 || i === pages - 2) html += `<span style="padding:0 4px;color:var(--text-faint);">…</span>`;
-      continue;
-    }
-    html += `<button class="pg-btn ${i===cur?'active':''}" onclick="goPage(${i})">${i}</button>`;
-  }
-  html += `<button class="pg-btn" onclick="goPage(${cur+1})" ${cur>=pages?'disabled':''}>›</button>`;
-  pg.innerHTML = html;
-}
-
-function goPage(n) {
-  const total = getFiltered().length;
-  const pages = Math.ceil(total / PAGE_SIZE) || 1;
-  currentPage = Math.max(1, Math.min(n, pages));
-  renderTable();
-}
-
-// ══════════════════════════════════════════════════════
-// ROW ACTIONS
-// ══════════════════════════════════════════════════════
-function getRow(id) {
-  return currentData.super.find(r => r.id === id);
-}
-
-function editRow(id) {
-  const r = getRow(id);
-  if (!r) return;
-  editingId = id;
-  document.getElementById('modal-title').textContent = 'Editar Tarifa · ' + id;
-  document.getElementById('modal-tarifa').style.display = 'flex';
-  document.getElementById('f-id').value = r.id;
-  document.getElementById('f-cliente').value = r.convenio || '';
-  document.getElementById('f-estacion').value  = r.estacion;
-  document.getElementById('f-rol').value       = r.rol;
-  document.getElementById('f-asegurado').value = r.asegurado;
-  document.getElementById('f-m-pedido').value  = r.m_pedido;
-  document.getElementById('f-m-bulto').value   = r.m_bulto;
-  document.getElementById('f-vigencia-inicio').value = r.vigencia_inicio || '';
-  document.getElementById('f-vigencia-fin').value    = r.vigencia_fin || '';
-  lucide.createIcons({ el: document.getElementById('modal-tarifa') });
-}
-
-function duplicateRow(id) {
-  const r = getRow(id);
-  if (!r) return;
-  const newId  = 'SP' + String(Date.now()).slice(-4);
-  const newRow = { ...r, id: newId, estado: 'inactivo', _hist: [{ fecha: new Date().toISOString().slice(0,10), accion: 'Duplicado desde ' + id, usuario: 'admin' }] };
-  currentData.super.unshift(newRow);
-  currentPage = 1;
-  renderTable();
-  updateKPIs();
-}
-
-function deleteRow(id) {
-  if (!confirm(`¿Eliminar tarifa ${id}? Esta acción no se puede deshacer.`)) return;
-  currentData.super = currentData.super.filter(r => r.id !== id);
-  renderTable();
-  updateKPIs();
-}
-
-function showHistorial(id) {
-  const r = getRow(id);
-  if (!r) return;
-  document.getElementById('modal-historial').style.display = 'flex';
-  const hist = r._hist || [];
-  document.getElementById('historial-body').innerHTML = `
-    <div style="font-size:13px;font-weight:600;margin-bottom:12px;color:var(--text-muted);">Tarifa ${id}</div>
-    ${hist.length === 0 ? '<p style="color:var(--text-faint);font-size:12px;">Sin historial registrado.</p>' :
-      hist.map(h => `
-        <div style="display:flex;gap:10px;align-items:flex-start;padding:8px 0;border-bottom:1px solid var(--border);">
-          <span class="history-dot" style="margin-top:5px;flex-shrink:0;"></span>
-          <div>
-            <div style="font-size:12px;color:var(--text);">${h.accion}</div>
-            <div style="font-size:11px;color:var(--text-faint);">${h.fecha} · ${h.usuario}</div>
-          </div>
-        </div>`).join('')}
-  `;
-  lucide.createIcons();
-}
-
-function closeHistorial() {
-  document.getElementById('modal-historial').style.display = 'none';
-}
-
-// ══════════════════════════════════════════════════════
-// MODAL NUEVA TARIFA
-// ══════════════════════════════════════════════════════
-function openModal() {
-  editingId = null;
-  document.getElementById('modal-title').textContent = 'Nueva Tarifa';
-  document.getElementById('modal-tarifa').style.display = 'flex';
-  document.getElementById('f-id').value = 'SP' + String(Date.now()).slice(-4);
-  document.getElementById('f-cliente').value = '';
-  document.getElementById('f-estacion').value = '';
-  document.getElementById('f-rol').value = 'Picker';
-  document.getElementById('f-asegurado').value = '';
-  document.getElementById('f-m-pedido').value = '';
-  document.getElementById('f-m-bulto').value = '';
-  document.getElementById('f-vigencia-inicio').value = new Date().toISOString().slice(0,10);
-  document.getElementById('f-vigencia-fin').value = '2026-12-31';
-  lucide.createIcons({ el: document.getElementById('modal-tarifa') });
-}
-
-function closeModal() {
-  document.getElementById('modal-tarifa').style.display = 'none';
-}
-
-function saveTarifa() {
-  const id       = document.getElementById('f-id').value;
-  const convenio = document.getElementById('f-cliente').value || 'N/A';
-  const viIni    = document.getElementById('f-vigencia-inicio').value;
-  const viFin    = document.getElementById('f-vigencia-fin').value;
-  const hist = { fecha: new Date().toISOString().slice(0,10), accion: editingId ? 'Editado' : 'Creación', usuario: 'admin' };
-
-  const row = {
-    id, convenio, estacion: document.getElementById('f-estacion').value,
-    rol: document.getElementById('f-rol').value,
-    asegurado: +document.getElementById('f-asegurado').value || 0,
-    m_pedido:  +document.getElementById('f-m-pedido').value  || 0,
-    m_bulto:   +document.getElementById('f-m-bulto').value   || 0,
-    vigencia_inicio: viIni, vigencia_fin: viFin, estado: 'activo',
-    _hist: editingId ? [...(getRow(editingId)?._hist||[]), hist] : [hist],
-  };
-
-  if (editingId) {
-    const idx = currentData.super.findIndex(r => r.id === editingId);
-    if (idx >= 0) currentData.super[idx] = row; else currentData.super.unshift(row);
-  } else {
-    currentData.super.unshift(row);
-  }
-
-  renderTable();
-  updateKPIs();
-  closeModal();
-}
-
-// ══════════════════════════════════════════════════════
-// KPIs
-// ══════════════════════════════════════════════════════
-function updateKPIs() {
-  const activas   = currentData.super.filter(r => r.estado === 'activo').length;
-  const vencidas  = currentData.super.filter(r => r.estado === 'vencido').length;
-  const convenios = new Set(currentData.super.filter(r => r.estado === 'activo').map(r => r.convenio)).size;
-
-  document.getElementById('kpi-activas').textContent   = activas;
-  document.getElementById('kpi-convenios').textContent = convenios;
-  document.getElementById('kpi-vencidas').textContent  = vencidas;
-}
-
-// ══════════════════════════════════════════════════════
-// IMPORT / EXPORT
-// ══════════════════════════════════════════════════════
-function exportExcel() {
-  alert('Exportando tabla "Supermercados" como Excel…\n(Integración con xlsx pendiente en producción)');
-}
-function importFile(input) {
-  if (!input.files[0]) return;
-  alert(`Archivo "${input.files[0].name}" recibido.\nProcesando importación…\n(Parser xlsx disponible vía /api/tarifario/import)`);
-  input.value = '';
 }
 
 // ══════════════════════════════════════════════════════
 // INIT
 // ══════════════════════════════════════════════════════
-renderTable();
-updateKPIs();
 lucide.createIcons();
-
-// ══════════════════════════════════════════════════════
-// TABS
-// ══════════════════════════════════════════════════════
-let cencoIniciado = false;
-function cambiarTab(tab) {
-  document.getElementById('tab-btn-super').classList.toggle('active', tab === 'super');
-  document.getElementById('tab-btn-cenco').classList.toggle('active', tab === 'cenco');
-  document.getElementById('tab-super').style.display = tab === 'super' ? 'flex' : 'none';
-  document.getElementById('tab-cenco').style.display = tab === 'cenco' ? 'flex' : 'none';
-  if (tab === 'cenco') {
-    if (!cencoIniciado) { cencoIniciado = true; initCenco(); }
-    else setTimeout(() => mapaCenco && mapaCenco.invalidateSize(), 50);
-  }
-}
+initCenco();
 
 // ══════════════════════════════════════════════════════
 // CENCO — datos por polígono
@@ -792,13 +398,21 @@ function renderCencoKpis() {
   document.getElementById('cenco-kpi-salas').textContent = new Set(Object.values(cencoMapaSalas)).size;
 }
 
-function salasConocidas() {
-  return [...new Set(cencoTarifas.map(t => t.sala))].sort();
+// Junta las Salas conocidas desde cualquier fuente (mapa Grupo→Sala, zonas
+// con polígono, tarifas ya configuradas) — así no se deja afuera una Sala que
+// todavía no tiene ninguna tarifa justo cuando se la quiere agregar por
+// primera vez.
+function todasLasSalas() {
+  return [...new Set([
+    ...Object.values(cencoMapaSalas),
+    ...cencoZonas.map(z => z.sala),
+    ...cencoTarifas.map(t => t.sala),
+  ].filter(Boolean))].sort();
 }
 
 function renderSalasConfig() {
   const grupos = [...new Set(cencoZonas.map(z => z.grupo))];
-  const salas = salasConocidas();
+  const salas = todasLasSalas();
   const cont = document.getElementById('cenco-salas-config');
   if (grupos.length === 0) {
     cont.innerHTML = '<p style="font-size:12px;color:var(--text-faint);">Importa primero el archivo de polígonos.</p>';
@@ -884,7 +498,7 @@ function renderMapaCenco() {
   if (bounds.length) mapaCenco.fitBounds(bounds, { padding: [16,16] });
 
   const leyenda = document.getElementById('cenco-leyenda');
-  leyenda.innerHTML = salasConocidas().map(s => `<span><span class="legend-dot" style="background:${colorDeSala(s)};"></span>${s}</span>`).join('');
+  leyenda.innerHTML = todasLasSalas().map(s => `<span><span class="legend-dot" style="background:${colorDeSala(s)};"></span>${s}</span>`).join('');
 }
 
 // Ray casting en el navegador (mismo algoritmo que el backend) — permite
@@ -960,7 +574,7 @@ function abrirModalGeocerca() {
   document.getElementById('geo-vigencia-fin').value = '';
   document.getElementById('geo-mensaje').classList.add('hidden');
   const selSala = document.getElementById('geo-sala');
-  selSala.innerHTML = salasConocidas().map(s => `<option value="${s}">${s}</option>`).join('');
+  selSala.innerHTML = todasLasSalas().map(s => `<option value="${s}">${s}</option>`).join('');
   document.getElementById('modal-geocerca').style.display = 'flex';
   if (window.lucide) lucide.createIcons();
 }
@@ -1026,6 +640,72 @@ async function eliminarZonaCenco(id) {
   if (!confirm('¿Eliminar esta geocerca? Esta acción no se puede deshacer.')) return;
   const r = await fetch(`/api/tarifario/cenco/zonas/${id}`, { method: 'DELETE' }).then(x => x.json());
   if (!r.ok) { alert(r.error || 'No se pudo eliminar'); return; }
+  cargarCenco();
+}
+
+// ─── Modal "Nueva Tarifa" — para una geocerca que ya existe ────────────────
+// A diferencia del botón dentro de cada fila de "Tarifas por zona" (que ya
+// sabe la Sala/zona porque naciste haciendo click ahí), este es el punto de
+// entrada general: eliges Sala y geocerca de listas reales (nunca texto
+// libre), así la tarifa siempre queda atada a una zona que existe de verdad.
+function abrirModalNuevaTarifa() {
+  const selSala = document.getElementById('nt-sala');
+  selSala.innerHTML = todasLasSalas().map(s => `<option value="${s}">${s}</option>`).join('');
+  poblarZonasNuevaTarifa();
+  document.getElementById('nt-lunsab').value = '';
+  document.getElementById('nt-domfest').value = '';
+  document.getElementById('nt-vigencia-inicio').value = '';
+  document.getElementById('nt-vigencia-fin').value = '';
+  document.getElementById('nt-mensaje').classList.add('hidden');
+  document.getElementById('modal-nueva-tarifa').style.display = 'flex';
+  if (window.lucide) lucide.createIcons();
+}
+
+function poblarZonasNuevaTarifa() {
+  const sala = document.getElementById('nt-sala').value;
+  const selZona = document.getElementById('nt-zona');
+  const zonas = cencoZonas.filter(z => z.sala === sala).sort((a, b) => a.nombre.localeCompare(b.nombre));
+  selZona.innerHTML = zonas.length === 0
+    ? '<option value="">Sin geocercas para esta Sala</option>'
+    : zonas.map(z => `<option value="${z.nombre}">${z.nombre}</option>`).join('');
+}
+
+function cerrarModalNuevaTarifa() {
+  document.getElementById('modal-nueva-tarifa').style.display = 'none';
+}
+
+async function guardarNuevaTarifaDesdeModal() {
+  const sala = document.getElementById('nt-sala').value;
+  const destino = document.getElementById('nt-zona').value;
+  const msj = document.getElementById('nt-mensaje');
+  msj.classList.add('hidden');
+
+  if (!sala || !destino) {
+    msj.classList.remove('hidden'); msj.className = 'import-result warn';
+    msj.textContent = 'Elige una Sala y una geocerca.';
+    return;
+  }
+
+  const lunSab = document.getElementById('nt-lunsab').value;
+  const domFestivo = document.getElementById('nt-domfest').value;
+  const r = await fetch('/api/tarifario/cenco/tarifas', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      sala, destino,
+      lunSab: lunSab === '' ? null : Number(lunSab),
+      domFestivo: domFestivo === '' ? null : Number(domFestivo),
+      vigenciaInicio: document.getElementById('nt-vigencia-inicio').value || null,
+      vigenciaFin: document.getElementById('nt-vigencia-fin').value || null,
+    }),
+  }).then(x => x.json());
+
+  if (!r.ok) {
+    msj.classList.remove('hidden'); msj.className = 'import-result warn';
+    msj.textContent = r.error || 'No se pudo crear la tarifa.';
+    return;
+  }
+
+  cerrarModalNuevaTarifa();
   cargarCenco();
 }
 
@@ -1194,7 +874,7 @@ function renderCencoAsegurados() {
 function renderPruebaSalaSelect() {
   const sel = document.getElementById('prueba-sala');
   const actual = sel.value;
-  sel.innerHTML = salasConocidas().map(s => `<option value="${s}">${s}</option>`).join('');
+  sel.innerHTML = todasLasSalas().map(s => `<option value="${s}">${s}</option>`).join('');
   if (actual) sel.value = actual;
 }
 
