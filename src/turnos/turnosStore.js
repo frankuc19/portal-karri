@@ -15,9 +15,9 @@ const ASISTENCIA_FILE   = path.join(DATA_DIR, 'turnos_asistencia.json');
 const OBSERVACIONES_FILE = path.join(DATA_DIR, 'turnos_observaciones.json');
 
 const SHIFT_TYPES = {
-  AM:   { code: 'AM',   name: 'Mañana',   startTime: '08:00', endTime: '14:00' },
-  PM:   { code: 'PM',   name: 'Tarde',    startTime: '14:00', endTime: '20:00' },
-  FULL: { code: 'FULL', name: 'Jornada completa', startTime: '08:00', endTime: '20:00' },
+  AM:   { code: 'AM',   name: 'Mañana',   startTime: '09:00', endTime: '15:00' },
+  PM:   { code: 'PM',   name: 'Tarde',    startTime: '15:00', endTime: '22:00' },
+  FULL: { code: 'FULL', name: 'Jornada completa', startTime: '09:00', endTime: '22:00' },
   CAPACITACION: { code: 'CAPACITACION', name: 'Capacitación', startTime: '10:30', endTime: '11:30' },
 };
 
@@ -239,13 +239,14 @@ function ensureKarrier(rut, name, phone) {
 }
 
 // ─── Slots (disponibilidad de turnos) ──────────────────────────────────────────
-// El horario de Capacitación siempre se toma de SHIFT_TYPES (no de lo
-// guardado en el slot al crearlo) para que un cambio de horario aplique
-// también a los turnos de Capacitación ya creados, sin recrearlos uno a uno.
+// El horario de cada turno siempre se toma de SHIFT_TYPES (no de lo guardado
+// en el slot al crearlo) para que un cambio de horario aplique también a los
+// turnos ya creados, sin recrearlos uno a uno.
 function getSlots() {
-  return readJson(SLOTS_FILE, []).map(s => s.shiftType === 'CAPACITACION'
-    ? { ...s, startTime: SHIFT_TYPES.CAPACITACION.startTime, endTime: SHIFT_TYPES.CAPACITACION.endTime }
-    : s);
+  return readJson(SLOTS_FILE, []).map(s => {
+    const tipo = SHIFT_TYPES[s.shiftType];
+    return tipo ? { ...s, startTime: tipo.startTime, endTime: tipo.endTime } : s;
+  });
 }
 function getSlotById(id) { return getSlots().find(s => s.id === id) || null; }
 function saveSlot(slot) {
