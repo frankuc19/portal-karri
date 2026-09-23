@@ -15,11 +15,27 @@ const ASISTENCIA_FILE   = path.join(DATA_DIR, 'turnos_asistencia.json');
 const OBSERVACIONES_FILE = path.join(DATA_DIR, 'turnos_observaciones.json');
 
 const SHIFT_TYPES = {
-  AM:   { code: 'AM',   name: 'Mañana',   startTime: '09:00', endTime: '15:00' },
-  PM:   { code: 'PM',   name: 'Tarde',    startTime: '15:00', endTime: '22:00' },
-  FULL: { code: 'FULL', name: 'Jornada completa', startTime: '09:00', endTime: '22:00' },
+  AM:   { code: 'AM',   name: 'Mañana',   startTime: '08:00', endTime: '14:00' },
+  PM:   { code: 'PM',   name: 'Tarde',    startTime: '14:00', endTime: '20:00' },
+  FULL: { code: 'FULL', name: 'Jornada completa', startTime: '08:00', endTime: '20:00' },
   CAPACITACION: { code: 'CAPACITACION', name: 'Capacitación', startTime: '10:30', endTime: '11:30' },
 };
+
+// Horarios propios de una cadena — se detecta por el nombre de la tienda (igual
+// que en el formulario público). Las demás cadenas (Walmart, etc.) usan los de
+// SHIFT_TYPES.
+const HORARIOS_POR_CADENA = [
+  { match: ['tottus'], horarios: {
+    AM:   { startTime: '09:00', endTime: '15:00' },
+    PM:   { startTime: '15:00', endTime: '22:00' },
+    FULL: { startTime: '09:00', endTime: '22:00' },
+  } },
+];
+function horarioDeTurno(shiftType, nombreTienda) {
+  const n = String(nombreTienda || '').toLowerCase();
+  const cadena = HORARIOS_POR_CADENA.find(c => c.match.some(k => n.includes(k)));
+  return cadena?.horarios[shiftType] || SHIFT_TYPES[shiftType] || null;
+}
 
 // Tipos que participan en la planificación de cupos (Picker/Shopper/Driver) —
 // Capacitación queda afuera a propósito: no tiene cupos limitados y no debe
@@ -239,13 +255,14 @@ function ensureKarrier(rut, name, phone) {
 }
 
 // ─── Slots (disponibilidad de turnos) ──────────────────────────────────────────
-// El horario de cada turno siempre se toma de SHIFT_TYPES (no de lo guardado
-// en el slot al crearlo) para que un cambio de horario aplique también a los
-// turnos ya creados, sin recrearlos uno a uno.
+// El horario de cada turno se calcula siempre según el tipo de turno y la
+// cadena de la tienda (no lo guardado en el slot al crearlo), así un cambio de
+// horario aplica también a los turnos ya creados, sin recrearlos uno a uno.
 function getSlots() {
+  const tiendas = new Map(getTiendas().map(t => [t.id, t.name]));
   return readJson(SLOTS_FILE, []).map(s => {
-    const tipo = SHIFT_TYPES[s.shiftType];
-    return tipo ? { ...s, startTime: tipo.startTime, endTime: tipo.endTime } : s;
+    const h = horarioDeTurno(s.shiftType, tiendas.get(s.storeId));
+    return h ? { ...s, startTime: h.startTime, endTime: h.endTime } : s;
   });
 }
 function getSlotById(id) { return getSlots().find(s => s.id === id) || null; }
@@ -262,7 +279,7 @@ function deleteSlot(id) {
 }
 
 function createSlot({ storeId, shiftType, date, capacity }) {
-  const tipo = SHIFT_TYPES[shiftType];
+  const tipo = horarioDeTurno(shiftType, getTiendaById(storeId)?.name);
   if (!tipo) throw new Error('Tipo de turno inválido');
   const slot = {
     id: crypto.randomUUID(),
