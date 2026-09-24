@@ -491,13 +491,13 @@ adminRouter.get('/dashboard', (req, res) => {
 });
 
 adminRouter.get('/asignaciones', (req, res) => {
-  const { storeId, weekStart, status, role, date } = req.query;
-  res.json({ ok: true, asignaciones: store.listAsignaciones({ storeId: storeId || null, weekStartDate: weekStart || null, status: status || null, role: role || null, date: date || null }) });
+  const { storeId, weekStart, status, role, date, shiftType } = req.query;
+  res.json({ ok: true, asignaciones: store.listAsignaciones({ storeId: storeId || null, weekStartDate: weekStart || null, status: status || null, role: role || null, date: date || null, shiftType: shiftType || null }) });
 });
 
 adminRouter.get('/asignaciones/export', (req, res) => {
-  const { storeId, weekStart, status, role, date } = req.query;
-  const asignaciones = store.listAsignaciones({ storeId: storeId || null, weekStartDate: weekStart || null, status: status || null, role: role || null, date: date || null });
+  const { storeId, weekStart, status, role, date, shiftType } = req.query;
+  const asignaciones = store.listAsignaciones({ storeId: storeId || null, weekStartDate: weekStart || null, status: status || null, role: role || null, date: date || null, shiftType: shiftType || null });
 
   const ESTADO_LABEL = { ACTIVE: 'Activo', CANCELLED: 'Cancelado' };
   const filas = asignaciones.map(a => ({

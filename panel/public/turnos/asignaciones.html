@@ -53,6 +53,7 @@
         <option value="CANCELLED">Cancelados</option>
         <option value="">Todos</option>
       </select>
+      <button class="btn-secondary" id="btn-capacitacion" onclick="toggleCapacitacion()" title="Mostrar solo turnos de Capacitación"><i data-lucide="graduation-cap" style="width:13px;height:13px;"></i> Capacitación</button>
       <input type="date" class="input" id="filtro-dia" style="width:150px;" onchange="cargar()">
       <button class="btn-ghost" id="btn-limpiar-dia" onclick="limpiarDia()" title="Volver a vista por semana" style="display:none;"><i data-lucide="x" style="width:13px;height:13px;"></i> Día</button>
       <div class="week-nav" id="week-nav">
@@ -133,6 +134,14 @@ function cambiarSemana(dias) {
   cargar();
 }
 function irHoy() { weekStart = mondayOf(new Date()); cargar(); }
+let soloCapacitacion = false;
+function toggleCapacitacion() {
+  soloCapacitacion = !soloCapacitacion;
+  const b = document.getElementById('btn-capacitacion');
+  b.style.background = soloCapacitacion ? 'var(--electric)' : '';
+  b.style.color = soloCapacitacion ? '#080b0a' : '';
+  cargar();
+}
 function limpiarDia() { document.getElementById('filtro-dia').value = ''; cargar(); }
 
 async function cargarTiendas() {
@@ -167,6 +176,7 @@ async function cargar() {
   if (storeId) params.set('storeId', storeId);
   if (status) params.set('status', status);
   if (role) params.set('role', role);
+  if (soloCapacitacion) params.set('shiftType', 'CAPACITACION');
 
   document.getElementById('btn-descargar').href = `/api/turnos/admin/asignaciones/export?${params}`;
 

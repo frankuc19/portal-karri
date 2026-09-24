@@ -571,7 +571,7 @@ function misTurnos(rut) {
 
 // Lista asignaciones (tomas de turno) con datos de tienda/slot embebidos,
 // para la pantalla administrativa de "Asignaciones".
-function listAsignaciones({ storeId, weekStartDate, status, role, date } = {}) {
+function listAsignaciones({ storeId, weekStartDate, status, role, date, shiftType } = {}) {
   const weekEnd = weekStartDate ? (() => {
     const d = new Date(weekStartDate + 'T00:00:00');
     d.setDate(d.getDate() + 6);
@@ -591,6 +591,7 @@ function listAsignaciones({ storeId, weekStartDate, status, role, date } = {}) {
     .filter(a => !status || a.status === status)
     .filter(a => !role || a.role === role)
     .filter(a => !date || a.slot.date === date)
+    .filter(a => !shiftType || a.slot.shiftType === shiftType)
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 
