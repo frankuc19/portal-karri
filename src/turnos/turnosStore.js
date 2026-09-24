@@ -578,18 +578,22 @@ function listAsignaciones({ storeId, weekStartDate, status, role, date, shiftTyp
     return d.toISOString().slice(0, 10);
   })() : null;
 
+  // Slots y tiendas se indexan una sola vez — buscarlos con getSlotById /
+  // getTiendaById por cada asignación releía y recalculaba todos los slots y
+  // tiendas una vez por asignación (miles de veces por consulta).
+  const slotsPorId = new Map(getSlots().map(s => [s.id, s]));
+  const tiendasPorId = new Map(getTiendas().map(t => [t.id, t]));
+
   return getAsignaciones()
+    .filter(a => !status || a.status === status)
+    .filter(a => !role || a.role === role)
     .map(a => {
-      const slot = getSlotById(a.slotId);
-      if (!slot) return null;
-      const tienda = getTiendaById(slot.storeId);
-      return { ...a, slot, tienda };
+      const slot = slotsPorId.get(a.slotId);
+      return slot ? { ...a, slot, tienda: tiendasPorId.get(slot.storeId) || null } : null;
     })
     .filter(Boolean)
     .filter(a => !storeId || a.slot.storeId === storeId)
     .filter(a => !weekStartDate || (a.slot.date >= weekStartDate && a.slot.date <= weekEnd))
-    .filter(a => !status || a.status === status)
-    .filter(a => !role || a.role === role)
     .filter(a => !date || a.slot.date === date)
     .filter(a => !shiftType || a.slot.shiftType === shiftType)
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
