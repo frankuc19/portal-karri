@@ -340,11 +340,22 @@ function iniciarProcesoPago({ fechaInicio, fechaFin, festivos }) {
 
   (async () => {
     try {
+      // La descarga avisa "finalizado" al terminar el último día, pero el job
+      // todavía tiene que calcular y guardar en Supabase: si se propagara ese
+      // finalizado, la pantalla pediría el resultado antes de que exista
+      // ("Resultado no disponible todavía"). Solo se marca finalizado al final.
       const { filas, errores } = await descargarPedidosPorRango(fechaInicio, fechaFin, (progreso) => {
-        job.estado = { ...progreso, errorFatal: null };
+        job.estado = { ...progreso, finalizado: false, errorFatal: null };
       });
+      job.estado = { ...job.estado, diaLabel: 'Calculando y guardando...' };
       const { detalle, resumen } = calcularPagos(filas, { festivos });
-      const guardado = await guardarCorridaEnSupabase({ fechaInicio, fechaFin, festivos, detalle, resumen, errores });
+      let guardado;
+      try {
+        guardado = await guardarCorridaEnSupabase({ fechaInicio, fechaFin, festivos, detalle, resumen, errores });
+      } catch (e) {
+        // Un fallo de red al guardar no debe perder un cálculo ya hecho.
+        guardado = { guardado: false, motivo: e.message };
+      }
       if (!guardado.guardado) console.warn('[Estado de Pago] No quedó guardado en Supabase:', guardado.motivo);
       job.resultado = { detalle, resumen, errores, guardado };
       job.estado = { ...job.estado, finalizado: true };
