@@ -73,8 +73,15 @@ const sinPermiso = (req, res) => {
   return false;
 };
 
+// Primera vez: el tarifario del panel se siembra solo con la hoja, para que quede editable de inmediato.
+async function sembrarSiVacio() {
+  if (Store.hayTarifarioPropio()) return;
+  Store.reemplazarDesdeFilasMotor(T.cargarTarifario(await S.leerTarifarioCrudo()));
+}
+
 router.get('/tarifario', async (_req, res) => {
   try {
+    await sembrarSiVacio();
     if (Store.hayTarifarioPropio()) return res.json({ ok: true, origen: 'panel', info: Store.getInfo(), tarifas: Store.getTarifas() });
     const tarifario = T.cargarTarifario(await S.leerTarifarioCrudo());
     const tarifas = tarifario.map((t, i) => ({ ...t, id: 'HOJA-' + (i + 1), fechaInicio: t.fechaInicio === null ? null : T.isoDeMs(t.fechaInicio), fechaFin: t.fechaFin === null ? null : T.isoDeMs(t.fechaFin) }));
@@ -91,9 +98,9 @@ router.post('/tarifario/importar-hoja', async (req, res) => {
   } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
-const exigirPropio = (req, res, next) => {
+const exigirPropio = async (req, res, next) => {
   if (sinPermiso(req, res)) return;
-  if (!Store.hayTarifarioPropio()) return res.status(409).json({ ok: false, error: 'Primero importa el tarifario de la hoja al panel.' });
+  try { await sembrarSiVacio(); } catch (e) { return res.status(500).json({ ok: false, error: e.message }); }
   next();
 };
 router.post('/tarifario/tarifas', exigirPropio, (req, res) => {
