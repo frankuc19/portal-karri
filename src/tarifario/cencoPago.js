@@ -344,7 +344,7 @@ function iniciarProcesoPago({ fechaInicio, fechaFin, festivos }) {
       // todavía tiene que calcular y guardar en Supabase: si se propagara ese
       // finalizado, la pantalla pediría el resultado antes de que exista
       // ("Resultado no disponible todavía"). Solo se marca finalizado al final.
-      const { filas, errores } = await descargarPedidosPorRango(fechaInicio, fechaFin, (progreso) => {
+      const { filas, errores, diasSinPedidos } = await descargarPedidosPorRango(fechaInicio, fechaFin, (progreso) => {
         job.estado = { ...progreso, finalizado: false, errorFatal: null };
       });
       job.estado = { ...job.estado, diaLabel: 'Calculando y guardando...' };
@@ -357,7 +357,7 @@ function iniciarProcesoPago({ fechaInicio, fechaFin, festivos }) {
         guardado = { guardado: false, motivo: e.message };
       }
       if (!guardado.guardado) console.warn('[Estado de Pago] No quedó guardado en Supabase:', guardado.motivo);
-      job.resultado = { detalle, resumen, errores, guardado };
+      job.resultado = { detalle, resumen, errores, diasSinPedidos, guardado };
       job.estado = { ...job.estado, finalizado: true };
     } catch (e) {
       job.estado = { ...job.estado, finalizado: true, errorFatal: e.message };

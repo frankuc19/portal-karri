@@ -400,6 +400,9 @@ async function cargarResultado() {
   if (r.errores && r.errores.length > 0) {
     mensajes.push(`${r.errores.length} día(s) con error al descargar: ` + r.errores.map(e => `${e.dia} (${e.motivo})`).join('; '));
   }
+  if (r.resumen.totalPedidos === 0 && !(r.errores && r.errores.length)) {
+    mensajes.push('La API de Cencosud respondió sin errores pero sin pedidos' + (r.diasSinPedidos?.length ? ` en ${r.diasSinPedidos.length} día(s) (${r.diasSinPedidos.join(', ')})` : '') + ' — revisa el rango de fechas.');
+  }
   if (r.resumen.totalPedidos > 0 && r.resumen.fueraDeTodosLosPoligonos === r.resumen.totalPedidos) {
     mensajes.push('Ningún pedido cayó dentro de un polígono configurado — revisa que hayas importado los polígonos en Tarifario → Cenco para las Salas correctas antes de procesar.');
   }

@@ -145,6 +145,12 @@ async function llamarAPICencoCsv(startMillis, endMillis, tokens) {
   if (resp.status === 200 || resp.status === 201) {
     const contentType = resp.headers.get('content-type') || '';
     const buffer = Buffer.from(await resp.arrayBuffer());
+    // Un 200 con JSON suele ser un mensaje de error de la API (token o
+    // filtros rechazados), no datos — se informa tal cual en vez de
+    // intentar leerlo como planilla y terminar con "0 pedidos" sin explicación.
+    if (contentType.includes('json')) {
+      return { error: 'La API respondió JSON en vez de datos: ' + buffer.toString('utf8').slice(0, 200) };
+    }
     if (contentType.includes('text/csv') || contentType.includes('text/plain')) {
       return { tipo: 'csv', datos: buffer.toString('utf8') };
     }
@@ -155,7 +161,8 @@ async function llamarAPICencoCsv(startMillis, endMillis, tokens) {
     // directo con la librería xlsx que ya usa el resto del Tarifario.
     return { tipo: 'excel', datos: buffer };
   }
-  return null;
+  const cuerpo = await resp.text().catch(() => '');
+  return { error: `HTTP ${resp.status}${cuerpo ? ': ' + cuerpo.slice(0, 200) : ''}` };
 }
 
 // Regex tolerante a comas dentro de campos (ej. direcciones) — mismo
@@ -217,6 +224,7 @@ async function descargarPedidosPorRango(fechaInicioISO, fechaFinISO, onProgreso)
   let header = null;
   const filas = [];
   const errores = [];
+  const diasSinPedidos = [];
 
   for (let d = 0; d < totalDias; d++) {
     const diaBase = new Date(Date.UTC(startDate.getUTCFullYear(), startDate.getUTCMonth(), startDate.getUTCDate() + d));
@@ -228,10 +236,10 @@ async function descargarPedidosPorRango(fechaInicioISO, fechaFinISO, onProgreso)
 
     try {
       const respuesta = await llamarAPICencoCsv(startMs, endMs, tokens);
-      if (!respuesta) { errores.push({ dia: diaLabel, motivo: 'La API de Cencosud no respondió con datos (revisa el token).' }); continue; }
+      if (respuesta.error) { errores.push({ dia: diaLabel, motivo: respuesta.error }); continue; }
 
       const rows = respuesta.tipo === 'excel' ? parsearExcelBuffer(respuesta.datos) : parsearCsv(respuesta.datos);
-      if (rows.length <= 1) continue;
+      if (rows.length <= 1) { diasSinPedidos.push(diaLabel); continue; }
       if (!header) header = rows[0];
 
       for (const row of rows.slice(1)) {
@@ -247,7 +255,7 @@ async function descargarPedidosPorRango(fechaInicioISO, fechaFinISO, onProgreso)
 
   if (onProgreso) onProgreso({ diaActual: totalDias, totalDias, diaLabel: 'Completado', filasAcumuladas: filas.length, errores, finalizado: true });
 
-  return { header, filas, errores };
+  return { header, filas, errores, diasSinPedidos };
 }
 
 module.exports = { descargarPedidosPorRango, leerTokenCenco, parsearCsv, normalizarOrdenId };
