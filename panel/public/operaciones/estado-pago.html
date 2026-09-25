@@ -31,6 +31,7 @@
   .import-result.error { background:rgba(220,38,38,.1);color:#dc2626; }
   .cliente-pill { display:flex;align-items:center;gap:8px;padding:10px 14px;border-radius:10px;border:1px solid rgba(15,23,22,.08);font-size:12.5px;font-weight:600; }
   .cliente-pill.activo { background:rgba(5,150,105,.08);color:#059669;border-color:rgba(5,150,105,.25); }
+  .cliente-pill:not(.activo):not(.proximamente):hover { background:rgba(15,23,22,.04); }
   .cliente-pill.proximamente { color:var(--text-faint);opacity:.6; }
   .bar-bg { background:#e8edf5;border-radius:999px;height:14px;overflow:hidden; }
   .bar-fill { height:100%;border-radius:999px;width:0%;background:linear-gradient(90deg,#059669 0%,#78fcd6 100%);transition:width .4s ease; }
@@ -57,11 +58,13 @@
     <div class="card" style="padding:16px 20px;">
       <p style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:10px;">Cliente</p>
       <div style="display:flex;gap:10px;flex-wrap:wrap;">
-        <div class="cliente-pill activo"><i data-lucide="check-circle-2" style="width:14px;height:14px;"></i> Cenco (por polígono)</div>
-        <div class="cliente-pill proximamente"><i data-lucide="clock" style="width:14px;height:14px;"></i> Falabella — próximamente</div>
+        <div class="cliente-pill activo" id="pill-cenco" onclick="cambiarCliente('cenco')" style="cursor:pointer;"><i data-lucide="check-circle-2" style="width:14px;height:14px;"></i> Cenco (por polígono)</div>
+        <div class="cliente-pill" id="pill-falabella" onclick="cambiarCliente('falabella')" style="cursor:pointer;"><i data-lucide="truck" style="width:14px;height:14px;"></i> Falabella (Geosort + Simpli)</div>
         <div class="cliente-pill proximamente"><i data-lucide="clock" style="width:14px;height:14px;"></i> Walmart — próximamente</div>
       </div>
     </div>
+
+    <div id="vista-cenco" style="display:flex;flex-direction:column;gap:20px;">
 
     <!-- Mapeo código de tienda -> Sala -->
     <div class="card" style="overflow:hidden;">
@@ -213,6 +216,71 @@
       </div>
 
     </div>
+    </div><!-- /vista-cenco -->
+
+    <!-- ═════════════ Vista Falabella ═════════════ -->
+    <div id="vista-falabella" class="hidden" style="display:flex;flex-direction:column;gap:20px;">
+
+      <div class="card" style="padding:16px 20px;">
+        <p style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:4px;">Procesar período — Falabella</p>
+        <p style="font-size:11px;color:var(--text-muted);margin-bottom:12px;">Descarga Geosort (y opcionalmente SimpliRoute), arma el resumen por ruta y calcula el pago. El tarifario "Pago Falabella", AGP, feriados y accesos se leen en vivo de la planilla "EDP Karri Chile".</p>
+        <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end;">
+          <div class="form-group"><label class="label">Fecha inicio</label><input class="input" type="date" id="fa-fecha-inicio" style="width:160px;"></div>
+          <div class="form-group"><label class="label">Fecha fin</label><input class="input" type="date" id="fa-fecha-fin" style="width:160px;"></div>
+          <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text);padding-bottom:8px;"><input type="checkbox" id="fa-simpli" checked> Incluir rutas Simpli (RUTA AM)</label>
+          <button class="btn-primary" id="fa-btn-procesar" onclick="faProcesar()"><i data-lucide="play" style="width:14px;height:14px;"></i> Procesar</button>
+        </div>
+        <div id="fa-progreso-wrap" class="hidden" style="margin-top:16px;">
+          <div style="display:flex;justify-content:space-between;font-size:11.5px;color:var(--text-muted);margin-bottom:6px;"><span id="fa-progreso-label">Iniciando...</span><span id="fa-progreso-pct">0%</span></div>
+          <div class="bar-bg"><div class="bar-fill" id="fa-progreso-bar"></div></div>
+        </div>
+        <div id="fa-mensaje" class="hidden"></div>
+      </div>
+
+      <div id="fa-resultados" class="hidden" style="display:flex;flex-direction:column;gap:20px;">
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;">
+          <div class="card kpi-card" style="padding:16px 18px;"><div class="label" style="margin-bottom:8px;">Rutas</div><div style="font-size:26px;font-weight:700;color:var(--electric-text);" id="fa-kpi-rutas">—</div></div>
+          <div class="card kpi-card" style="padding:16px 18px;"><div class="label" style="margin-bottom:8px;">Pago estimado</div><div style="font-size:22px;font-weight:700;color:#2563eb;" id="fa-kpi-pago">—</div><div style="font-size:11px;color:var(--text-muted);margin-top:3px;" id="fa-kpi-neto"></div></div>
+          <div class="card kpi-card" style="padding:16px 18px;"><div class="label" style="margin-bottom:8px;">Multas NC &lt; 95%</div><div style="font-size:26px;font-weight:700;color:#b45309;" id="fa-kpi-multas">—</div><div style="font-size:11px;color:var(--text-muted);margin-top:3px;" id="fa-kpi-multas-monto"></div></div>
+          <div class="card kpi-card" style="padding:16px 18px;"><div class="label" style="margin-bottom:8px;">Sin pago</div><div style="font-size:26px;font-weight:700;color:#dc2626;" id="fa-kpi-sinpago">—</div><div style="font-size:11px;color:var(--text-muted);margin-top:3px;" id="fa-kpi-sinpago-det"></div></div>
+        </div>
+
+        <div class="card" style="overflow:hidden;">
+          <div style="padding:16px 20px;border-bottom:1px solid rgba(15,23,22,.07);"><p style="font-size:13px;font-weight:600;color:var(--text);">Resumen por CT</p></div>
+          <div style="padding:0 20px 16px;"><div class="tbl-wrap" style="margin-top:16px;"><table>
+            <thead><tr><th>CT</th><th>Rutas</th><th>Pago estimado</th></tr></thead><tbody id="fa-tbody-ct"></tbody></table></div></div>
+        </div>
+
+        <div class="card" style="overflow:hidden;">
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid rgba(15,23,22,.07);flex-wrap:wrap;gap:10px;">
+            <div><p style="font-size:13px;font-weight:600;color:var(--text);">Detalle por ruta</p><p style="font-size:11px;color:var(--text-muted);margin-top:2px;" id="fa-nota-guardado"></p></div>
+            <button class="btn-secondary" onclick="faExportar()"><i data-lucide="download" style="width:13px;height:13px;"></i> Exportar Excel</button>
+          </div>
+          <div style="padding:0 20px 16px;">
+            <div class="tbl-wrap" style="margin-top:16px;"><table>
+              <thead><tr><th>Origen</th><th>Fecha</th><th>ID Ruta</th><th>CT</th><th>Patente</th><th>Zona</th><th>Term./Total</th><th>NDS</th><th>Vehículo</th><th>Pago</th><th>Servicio</th><th>Estado</th></tr></thead>
+              <tbody id="fa-tbody-detalle"></tbody></table></div>
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px;">
+              <span style="font-size:12px;color:var(--text-muted);" id="fa-count">— rutas</span><div class="pagination" id="fa-pg"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card" style="overflow:hidden;">
+        <div onclick="faToggleHistorial()" style="padding:16px 20px;cursor:pointer;">
+          <p style="font-size:13px;font-weight:600;color:var(--text);display:flex;align-items:center;gap:6px;"><i data-lucide="chevron-right" id="fa-hist-chevron" style="width:14px;height:14px;transition:transform .15s;"></i> Historial guardado — Falabella</p>
+          <p style="font-size:11px;color:var(--text-muted);margin-top:2px;margin-left:20px;">Cálculos ya procesados y guardados en Supabase.</p>
+        </div>
+        <div id="fa-hist-body" class="hidden" style="padding:0 20px 16px;border-top:1px solid rgba(15,23,22,.07);">
+          <div style="margin-top:16px;"><button class="btn-secondary" onclick="faCargarHistorial()"><i data-lucide="refresh-cw" style="width:13px;height:13px;"></i> Actualizar</button></div>
+          <div class="tbl-wrap" style="margin-top:12px;"><table>
+            <thead><tr><th>Calculado</th><th>Rango</th><th>Rutas</th><th>Pago estimado</th><th></th></tr></thead>
+            <tbody id="fa-tbody-hist"><tr><td colspan="5" style="text-align:center;color:var(--text-faint);padding:20px;">Click en "Actualizar" para cargar.</td></tr></tbody></table></div>
+        </div>
+      </div>
+
+    </div><!-- /vista-falabella -->
 
   </div>
 </div>
@@ -628,7 +696,211 @@ async function verCorridaHistorial(id) {
   mostrarResultado(adaptarDetalleGuardado(r.detalle), adaptarResumenGuardado(r.corrida));
 }
 
+// ══════════════════════════════════════════════════════
+// Cliente activo (Cenco / Falabella)
+// ══════════════════════════════════════════════════════
+function cambiarCliente(c) {
+  const fa = c === 'falabella';
+  document.getElementById('vista-cenco').classList.toggle('hidden', fa);
+  document.getElementById('vista-falabella').classList.toggle('hidden', !fa);
+  document.getElementById('pill-cenco').classList.toggle('activo', !fa);
+  document.getElementById('pill-falabella').classList.toggle('activo', fa);
+  try { localStorage.setItem('estado_pago_cliente', c); } catch (e) {}
+  if (window.lucide) lucide.createIcons();
+}
+
+// ══════════════════════════════════════════════════════
+// FALABELLA
+// ══════════════════════════════════════════════════════
+const FA_BASE = '/api/tarifario/falabella/pago';
+let faJobId = null, faCorridaGuardada = null, faPoll = null, faDetalle = [], faPagina = 1;
+const FA_PAGE = 10;
+const FA_ESTADO = { PAGADA: ['OK', 'motivo-ok'], SIN_TARIFA: ['Sin tarifa', 'motivo-warn'], NDS_BAJO: ['NDS < 80%', 'motivo-warn'], COMPLEMENTO: ['Complemento', 'motivo-warn'] };
+
+function faMensaje(tipo, texto) {
+  const el = document.getElementById('fa-mensaje');
+  el.classList.remove('hidden'); el.className = `import-result ${tipo}`; el.textContent = texto;
+}
+
+async function faProcesar() {
+  const fechaInicio = document.getElementById('fa-fecha-inicio').value;
+  const fechaFin = document.getElementById('fa-fecha-fin').value;
+  document.getElementById('fa-mensaje').classList.add('hidden');
+  if (!fechaInicio || !fechaFin) { alert('Elige fecha de inicio y fin.'); return; }
+  if (fechaFin < fechaInicio) { alert('La fecha de fin no puede ser anterior a la de inicio.'); return; }
+
+  document.getElementById('fa-btn-procesar').disabled = true;
+  document.getElementById('fa-resultados').classList.add('hidden');
+  document.getElementById('fa-progreso-wrap').classList.remove('hidden');
+  document.getElementById('fa-progreso-label').textContent = 'Leyendo tarifario, AGP y feriados...';
+  document.getElementById('fa-progreso-bar').style.width = '0%';
+  document.getElementById('fa-progreso-pct').textContent = '0%';
+
+  const r = await fetch(`${FA_BASE}/procesar`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ fechaInicio, fechaFin, incluirSimpli: document.getElementById('fa-simpli').checked }),
+  }).then((x) => x.json());
+  if (!r.ok) {
+    document.getElementById('fa-progreso-wrap').classList.add('hidden');
+    document.getElementById('fa-btn-procesar').disabled = false;
+    faMensaje('error', r.error || 'No se pudo iniciar el proceso.');
+    return;
+  }
+  faJobId = r.jobId;
+  if (faPoll) clearInterval(faPoll);
+  faPoll = setInterval(faPollEstado, 900);
+  faPollEstado();
+}
+
+async function faPollEstado() {
+  if (!faJobId) return;
+  const r = await fetch(`${FA_BASE}/estado/${faJobId}`).then((x) => x.json());
+  if (!r.ok) return;
+  const s = r.estado;
+  const pct = s.totalDias > 0 ? Math.min(100, Math.round((s.diaActual / s.totalDias) * 100)) : 0;
+  document.getElementById('fa-progreso-bar').style.width = pct + '%';
+  document.getElementById('fa-progreso-pct').textContent = pct + '%';
+  document.getElementById('fa-progreso-label').textContent = s.totalDias > 0
+    ? `${s.fase || ''}: ${s.diaLabel} (${s.filasAcumuladas} filas hasta ahora)` : (s.diaLabel && s.diaLabel !== 'Iniciando...' ? s.diaLabel : (s.fase || 'Iniciando...'));
+  if (!s.finalizado) return;
+
+  clearInterval(faPoll); faPoll = null;
+  document.getElementById('fa-btn-procesar').disabled = false;
+  document.getElementById('fa-progreso-wrap').classList.add('hidden');
+  if (s.errorFatal) { faMensaje('error', s.errorFatal); return; }
+  await faCargarResultado();
+}
+
+async function faCargarResultado() {
+  const r = await fetch(`${FA_BASE}/resultado/${faJobId}`).then((x) => x.json());
+  if (!r.ok) { faMensaje('error', r.error || 'No se pudo obtener el resultado.'); return; }
+  faCorridaGuardada = null;
+
+  const msgs = [];
+  (r.avisos || []).forEach((a) => msgs.push(a));
+  if (r.errores?.length) msgs.push(`${r.errores.length} problema(s) al descargar: ` + r.errores.map((e) => `${e.dia} (${e.motivo})`).join('; '));
+  if (msgs.length) faMensaje('warn', msgs.join(' · '));
+
+  const nota = document.getElementById('fa-nota-guardado');
+  if (r.guardado?.guardado) { faCorridaGuardada = r.guardado.corridaId; nota.textContent = '✓ Guardado en el historial.'; nota.style.color = 'var(--electric-text)'; }
+  else if (r.guardado?.motivo === 'SUPABASE_NO_CONFIGURADO') { nota.textContent = 'Supabase no está configurado — este cálculo no quedó guardado.'; nota.style.color = ''; }
+  else if (r.guardado) { nota.textContent = 'No se pudo guardar en el historial: ' + (r.guardado.motivo || 'error desconocido'); nota.style.color = '#b45309'; }
+  faMostrar(r.detalle, r.resumen);
+}
+
+function faMostrar(detalle, r) {
+  faDetalle = detalle;
+  document.getElementById('fa-kpi-rutas').textContent = (r.rutasGeosort || 0) + (r.rutasSimpli || 0);
+  document.getElementById('fa-kpi-pago').textContent = pesos(r.totalPago);
+  document.getElementById('fa-kpi-neto').textContent = `Neto tras multas: ${pesos(r.pagoNeto)}`;
+  document.getElementById('fa-kpi-multas').textContent = r.conMultaNC || 0;
+  document.getElementById('fa-kpi-multas-monto').textContent = pesos(r.multaTotal);
+  document.getElementById('fa-kpi-sinpago').textContent = (r.sinTarifa || 0) + (r.rutasNdsBajo || 0) + (r.rutasComplemento || 0);
+  document.getElementById('fa-kpi-sinpago-det').textContent = `${r.sinTarifa || 0} sin tarifa · ${r.rutasNdsBajo || 0} NDS<80% · ${r.rutasComplemento || 0} complemento`;
+
+  const cts = Object.entries(r.porCT || {}).sort((a, b) => a[0].localeCompare(b[0]));
+  document.getElementById('fa-tbody-ct').innerHTML = cts.length === 0
+    ? '<tr><td colspan="3" style="text-align:center;color:var(--text-faint);padding:20px;">Sin rutas.</td></tr>'
+    : cts.map(([ct, d]) => `<tr><td>${ct}</td><td>${d.rutas}</td><td class="td-mono">${pesos(d.total)}</td></tr>`).join('');
+
+  faPagina = 1; faRender();
+  document.getElementById('fa-resultados').classList.remove('hidden');
+  document.getElementById('fa-resultados').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  if (window.lucide) lucide.createIcons();
+}
+
+function faRender() {
+  const total = faDetalle.length, pages = Math.ceil(total / FA_PAGE) || 1;
+  faPagina = Math.min(faPagina, pages);
+  const pag = faDetalle.slice((faPagina - 1) * FA_PAGE, faPagina * FA_PAGE);
+  document.getElementById('fa-count').textContent = `${total} ruta${total !== 1 ? 's' : ''}`;
+  document.getElementById('fa-tbody-detalle').innerHTML = pag.length === 0
+    ? '<tr><td colspan="12" style="text-align:center;color:var(--text-faint);padding:24px;">Sin rutas en este período.</td></tr>'
+    : pag.map((f) => {
+        const [lbl, cls] = FA_ESTADO[f.estadoFila] || [f.estadoFila || '', 'motivo-warn'];
+        const obs = String(f.observacion || '').replace(/"/g, '&quot;');
+        return `<tr>
+          <td>${f.origen}</td><td>${f.iso || f.fecha || ''}</td><td class="td-mono">${f.idruta}</td><td>${f.ct}</td><td class="td-mono">${f.patente}</td><td>${f.zona}</td>
+          <td class="td-mono">${f.terminado ?? ''}/${f.total ?? ''}</td>
+          <td class="td-mono">${f.nivel === '' || f.nivel == null ? '—' : (Number(f.nivel) * 100).toFixed(1) + '%'}</td>
+          <td>${f.tipoVeh || '—'}</td>
+          <td class="td-mono" style="font-weight:600;">${f.pago == null ? '—' : pesos(f.pago)}</td>
+          <td>${f.servicio || '—'}</td>
+          <td><span class="motivo-badge ${cls}" title="${obs}">${lbl}</span></td></tr>`;
+      }).join('');
+  let h = `<button class="pg-btn" onclick="faIr(${faPagina - 1})" ${faPagina <= 1 ? 'disabled' : ''}>‹</button>`;
+  for (let i = 1; i <= pages; i++) {
+    if (pages > 7 && i > 2 && i < pages - 1 && Math.abs(i - faPagina) > 1) { if (i === 3 || i === pages - 2) h += '<span style="padding:0 4px;color:var(--text-faint);">…</span>'; continue; }
+    h += `<button class="pg-btn ${i === faPagina ? 'active' : ''}" onclick="faIr(${i})">${i}</button>`;
+  }
+  document.getElementById('fa-pg').innerHTML = h + `<button class="pg-btn" onclick="faIr(${faPagina + 1})" ${faPagina >= pages ? 'disabled' : ''}>›</button>`;
+}
+function faIr(n) { faPagina = Math.max(1, Math.min(n, Math.ceil(faDetalle.length / FA_PAGE) || 1)); faRender(); }
+
+function faExportar() {
+  if (faCorridaGuardada) window.open(`${FA_BASE}/historial/${faCorridaGuardada}?formato=excel`, '_blank');
+  else if (faJobId) window.open(`${FA_BASE}/resultado/${faJobId}?formato=excel`, '_blank');
+}
+
+// Historial guardado
+let faHistAbierto = false, faHistCargado = false;
+function faToggleHistorial() {
+  faHistAbierto = !faHistAbierto;
+  document.getElementById('fa-hist-body').classList.toggle('hidden', !faHistAbierto);
+  document.getElementById('fa-hist-chevron').style.transform = faHistAbierto ? 'rotate(90deg)' : 'rotate(0deg)';
+  if (faHistAbierto && !faHistCargado) faCargarHistorial();
+}
+async function faCargarHistorial() {
+  const tb = document.getElementById('fa-tbody-hist');
+  tb.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--text-faint);padding:20px;">Cargando...</td></tr>';
+  faHistCargado = true;
+  const r = await fetch(`${FA_BASE}/historial`).then((x) => x.json());
+  if (!r.ok) {
+    const m = r.error === 'SUPABASE_NO_CONFIGURADO' ? 'Supabase todavía no está configurado — no hay historial disponible.' : (r.error || 'No se pudo cargar el historial.');
+    tb.innerHTML = `<tr><td colspan="5" style="text-align:center;color:var(--text-faint);padding:20px;">${m}</td></tr>`; return;
+  }
+  if (!r.corridas.length) { tb.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--text-faint);padding:20px;">Todavía no hay cálculos guardados.</td></tr>'; return; }
+  tb.innerHTML = r.corridas.map((c) => `<tr>
+    <td>${new Date(c.ejecutado_at).toLocaleString('es-CL')}</td><td>${c.fecha_inicio} → ${c.fecha_fin}</td><td>${c.total_pedidos}</td><td class="td-mono">${pesos(c.total_pago)}</td>
+    <td><div style="display:flex;gap:4px;">
+      <button class="btn-secondary" style="padding:4px 10px;font-size:11px;" onclick="faVerGuardada('${c.id}')">Ver</button>
+      <button class="btn-secondary" style="padding:4px 10px;font-size:11px;" onclick="window.open('${FA_BASE}/historial/${c.id}?formato=excel','_blank')"><i data-lucide="download" style="width:12px;height:12px;"></i></button>
+      <button class="btn-danger-ghost" title="Borrar este cálculo" onclick="faBorrar('${c.id}', '${c.fecha_inicio} → ${c.fecha_fin}')"><i data-lucide="trash-2" style="width:13px;height:13px;"></i></button>
+    </div></td></tr>`).join('');
+  if (window.lucide) lucide.createIcons({ el: tb });
+}
+async function faBorrar(id, rango) {
+  if (!confirm(`¿Borrar el cálculo del ${rango}?\n\nSe elimina de Supabase junto con todo su detalle y no se puede deshacer.`)) return;
+  const r = await fetch(`${FA_BASE}/historial/${id}`, { method: 'DELETE' }).then((x) => x.json());
+  if (!r.ok) { alert(r.error || 'No se pudo borrar.'); return; }
+  if (faCorridaGuardada === id) { faCorridaGuardada = null; document.getElementById('fa-resultados').classList.add('hidden'); }
+  faCargarHistorial();
+}
+async function faVerGuardada(id) {
+  const r = await fetch(`${FA_BASE}/historial/${id}`).then((x) => x.json());
+  if (!r.ok) { alert(r.error || 'No se pudo cargar esta corrida.'); return; }
+  faJobId = null; faCorridaGuardada = id;
+  document.getElementById('fa-mensaje').classList.add('hidden');
+  const nota = document.getElementById('fa-nota-guardado');
+  nota.textContent = `Viendo cálculo guardado el ${new Date(r.corrida.ejecutado_at).toLocaleString('es-CL')}.`; nota.style.color = '';
+  const det = r.detalle.map((f) => ({
+    origen: f.origen, iso: f.fecha, idruta: f.idruta, ct: f.ct, patente: f.patente, zona: f.zona, tipoRuta: f.tipo_ruta,
+    terminado: f.terminados, total: f.total, nivel: f.nivel === null ? '' : f.nivel, tipoVeh: f.vehiculo,
+    tarifaBase: f.tarifa_base, tarifaVariable: f.tarifa_variable, pago: f.pago, servicio: f.servicio,
+    observacion: f.observacion, estadoFila: f.estado_fila,
+  }));
+  faMostrar(det, r.corrida.resumen || {});
+}
+
+function faInit() {
+  document.getElementById('fa-fecha-fin').value = new Date().toISOString().slice(0, 10);
+  document.getElementById('fa-fecha-inicio').value = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10);
+  let c = 'cenco'; try { c = localStorage.getItem('estado_pago_cliente') || 'cenco'; } catch (e) {}
+  cambiarCliente(c === 'falabella' ? 'falabella' : 'cenco');
+}
+
 init();
+faInit();
 </script>
 </body>
 </html>

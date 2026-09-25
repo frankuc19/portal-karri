@@ -311,11 +311,11 @@ async function guardarCorridaEnSupabase({ fechaInicio, fechaFin, festivos, detal
   return { guardado: true, corridaId: corrida.id };
 }
 
-async function obtenerHistorialCorridas({ desde, hasta } = {}) {
+async function obtenerHistorialCorridas({ desde, hasta, cliente = 'cenco' } = {}) {
   const supabase = getSupabase();
   if (!supabase) return { error: 'SUPABASE_NO_CONFIGURADO' };
 
-  let query = supabase.from('corridas_pago').select('*').order('ejecutado_at', { ascending: false }).limit(200);
+  let query = supabase.from('corridas_pago').select('*').eq('cliente', cliente).order('ejecutado_at', { ascending: false }).limit(200);
   if (desde) query = query.gte('fecha_inicio', desde);
   if (hasta) query = query.lte('fecha_fin', hasta);
 

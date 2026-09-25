@@ -36,6 +36,7 @@ const { sincronizarAltasOB } = require('../src/onboarding/altasSync');
 
 const cencoRoutes = require('../src/tarifario/cencoRoutes');
 const cencoPagoRoutes = require('../src/tarifario/cencoPagoRoutes');
+const falabellaRoutes = require('../src/tarifario/falabella/falabellaRoutes');
 
 const DELAY_MS   = 5000;
 const PORT       = process.env.PORT || 3000;
@@ -478,6 +479,7 @@ app.use('/api/turnos/admin', requireAuthApi, turnosAdminRoutes);
 // ─── API: tarifario Cenco (por polígono) ──────────────────────────────────────
 app.use('/api/tarifario/cenco', requireAuthApi, cencoRoutes);
 app.use('/api/tarifario/cenco/pago', requireAuthApi, cencoPagoRoutes);
+app.use('/api/tarifario/falabella/pago', requireAuthApi, falabellaRoutes);
 
 // ─── Estado global ────────────────────────────────────────────────────────────
 let waClient           = null;
