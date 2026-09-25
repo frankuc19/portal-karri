@@ -18,6 +18,7 @@ services:
       # GOOGLE_SHEET_ID, GOOGLE_SHEET_GID, GOOGLE_CREDENTIALS_B64
       # PANEL_USER, PANEL_PASSWORD, SESSION_SECRET
       # SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY (historial de Estado de Pago — Settings > API del proyecto Supabase)
+      # GEOSORT_USER, GEOSORT_PASSWORD (login automático a Geosort para el Estado de Pago Falabella; si faltan se usa Accesos B8/B9)
     disk:
       name: bot-data
       mountPath: /data

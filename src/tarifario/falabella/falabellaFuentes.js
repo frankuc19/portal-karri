@@ -75,14 +75,51 @@ function diasEntre(iniISO, finISO) {
   return dias;
 }
 
-async function descargarGeosort(iniISO, finISO, accesos, onProgreso) {
-  if (!accesos.geosortToken || !accesos.geosortCookie) {
-    throw new Error('Falta el token o la cookie de Geosort en la pestaña "Accesos" (celdas B10 y B12).');
-  }
-  const headers = {
-    authorization: 'Bearer ' + accesos.geosortToken, cookie: accesos.geosortCookie, accept: '*/*',
-    referer: 'https://geosort.falabella.com/app/reporterSupOnly', 'user-agent': 'Mozilla/5.0', 'x-country': 'CL',
+const LOGIN_URL_GEOSORT = 'https://geosort.falabella.com/api/crud-service/v1/login';
+
+// Inicia sesión en Geosort y devuelve { token, cookie } frescos (misma llamada del
+// script de tokens). Las cookies se envían solo como nombre=valor, sin atributos.
+async function loginGeosort(usuario, clave) {
+  const resp = await fetch(LOGIN_URL_GEOSORT, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', 'x-country': 'CL' },
+    body: JSON.stringify({ username: usuario, password: clave }),
+  });
+  if (resp.status !== 200 && resp.status !== 201) throw new Error(`Geosort rechazó el usuario/clave (HTTP ${resp.status}).`);
+  const texto = await resp.text();
+  let json; try { json = JSON.parse(texto); } catch { json = texto; }
+  const token = typeof json === 'string' ? json.replace(/^"|"$/g, '') : (json.token || json.access_token);
+  if (!token) throw new Error('Geosort no devolvió un token al iniciar sesión.');
+  const setCookies = typeof resp.headers.getSetCookie === 'function' ? resp.headers.getSetCookie() : [];
+  const cookie = setCookies.map((c) => c.split(';')[0]).join('; ');
+  return { token: String(token), cookie };
+}
+
+// Usuario/clave de Geosort: variables de entorno (recomendado) o pestaña "Accesos" (B8 y B9).
+function credencialesGeosort(accesos) {
+  return {
+    usuario: process.env.GEOSORT_USER || accesos.geosortUsuario || '',
+    clave: process.env.GEOSORT_PASSWORD || accesos.geosortClave || '',
   };
+}
+
+async function descargarGeosort(iniISO, finISO, accesos, onProgreso) {
+  const cred = credencialesGeosort(accesos);
+  const puedeLogin = !!(cred.usuario && cred.clave);
+  let sesion = null;
+  if (puedeLogin) {
+    try { sesion = await loginGeosort(cred.usuario, cred.clave); }
+    catch (e) { if (!accesos.geosortToken) throw e; /* si falla, se prueba con el token de la hoja */ }
+  }
+  if (!sesion) {
+    if (!accesos.geosortToken || !accesos.geosortCookie) {
+      throw new Error('No hay cómo iniciar sesión en Geosort: define GEOSORT_USER y GEOSORT_PASSWORD, o el usuario y clave en "Accesos" (B8 y B9).');
+    }
+    sesion = { token: accesos.geosortToken, cookie: accesos.geosortCookie };
+  }
+  const headers = () => ({
+    authorization: 'Bearer ' + sesion.token, cookie: sesion.cookie, accept: '*/*',
+    referer: 'https://geosort.falabella.com/app/reporterSupOnly', 'user-agent': 'Mozilla/5.0', 'x-country': 'CL',
+  });
   const dias = diasEntre(iniISO, finISO);
   let header = null;
   const filas = [];
@@ -92,7 +129,12 @@ async function descargarGeosort(iniISO, finISO, accesos, onProgreso) {
   for (let i = 0; i < dias.length; i++) {
     const dia = dias[i];
     if (onProgreso) onProgreso({ fase: 'Geosort', diaActual: i + 1, totalDias: dias.length, diaLabel: dia, filasAcumuladas: filas.length });
-    const resp = await fetch(`${BASE_URL_GEOSORT}?dateFrom=${dia}&dateUp=${dia}`, { method: 'GET', headers });
+    const urlDia = `${BASE_URL_GEOSORT}?dateFrom=${dia}&dateUp=${dia}`;
+    let resp = await fetch(urlDia, { method: 'GET', headers: headers() });
+    if ((resp.status === 401 || resp.status === 403) && puedeLogin) {
+      // El token venció a mitad del período: se renueva y se reintenta una vez.
+      try { sesion = await loginGeosort(cred.usuario, cred.clave); resp = await fetch(urlDia, { method: 'GET', headers: headers() }); } catch (e) { /* cae al manejo de error de abajo */ }
+    }
     if (resp.status === 200) {
       const texto = await resp.text();
       if (texto && texto.length > 50) {
@@ -103,7 +145,7 @@ async function descargarGeosort(iniISO, finISO, accesos, onProgreso) {
     } else {
       const cuerpo = await resp.text().catch(() => '');
       if (resp.status === 401 || resp.status === 403) {
-        errores.push({ dia, motivo: `El token de Geosort venció (HTTP ${resp.status}). Actualiza el token y la cookie en la pestaña "Accesos" de la planilla "EDP Karri Chile" (celdas B10 y B12) y vuelve a procesar.`, tokenVencido: true });
+        errores.push({ dia, motivo: `Geosort rechazó la sesión (HTTP ${resp.status}) incluso tras iniciar sesión de nuevo. Revisa el usuario y la clave de Geosort (GEOSORT_USER / GEOSORT_PASSWORD o Accesos B8 y B9).`, tokenVencido: true });
         break;
       }
       errores.push({ dia, motivo: `HTTP ${resp.status}${cuerpo ? ': ' + cuerpo.slice(0, 160) : ''}` });
@@ -344,4 +386,4 @@ function consolidar(filasGeosort, filasSimpli) {
   return todas.map((r) => ({ ...r, nivel: r.total > 0 ? r.terminado / r.total : '' }));
 }
 
-module.exports = { descargarGeosort, descargarSimpli, resumirGeosort, resumirSimpli, consolidar, parsearCsv, parseFechaHora };
+module.exports = { loginGeosort, descargarGeosort, descargarSimpli, resumirGeosort, resumirSimpli, consolidar, parsearCsv, parseFechaHora };

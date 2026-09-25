@@ -73,7 +73,7 @@ async function leerFeriados() {
 async function leerAccesos() {
   const filas = await leerPestana('Accesos', 'A1:B20');
   const b = (n) => String((filas[n - 1] && filas[n - 1][1]) ?? '').trim();
-  return { simpliUsuario: b(1), simpliClave: b(2), geosortToken: b(10), geosortCookie: b(12) };
+  return { simpliUsuario: b(1), simpliClave: b(2), geosortUsuario: b(8), geosortClave: b(9), geosortToken: b(10), geosortCookie: b(12) };
 }
 
 module.exports = { leerTarifarioCrudo, leerMapaAGP, leerFeriados, leerAccesos };
