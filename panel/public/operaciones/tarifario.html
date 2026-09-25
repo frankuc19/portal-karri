@@ -207,13 +207,15 @@
   <div class="flex-1 overflow-y-auto" id="tab-falabella" style="display:none;padding:20px 24px;flex-direction:column;gap:20px;">
     <div class="card" style="padding:16px 20px;">
       <p style="font-size:13px;font-weight:600;color:var(--text);">Tarifario Falabella</p>
-      <p style="font-size:11px;color:var(--text-muted);margin-top:2px;">Se lee en vivo de la pestaña "Pago Falabella" de la planilla "EDP Karri Chile". Para cambiar una tarifa, edítala allí: el Estado de Pago y esta tabla la toman al instante.</p>
+      <p style="font-size:11px;color:var(--text-muted);margin-top:2px;"><span id="fa-origen"></span></p>
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;align-items:center;">
         <select class="input" id="fa-f-servicio" style="width:190px;" onchange="faRenderTarifas()"><option value="">Todos los servicios</option></select>
         <select class="input" id="fa-f-geo" style="width:230px;" onchange="faRenderTarifas()"><option value="">Todos los CT / Geo</option></select>
         <input class="input" id="fa-f-fecha" type="date" style="width:150px;" onchange="faRenderTarifas()" title="Solo tarifas vigentes en esta fecha">
         <button class="btn-ghost" onclick="faLimpiarFiltros()">Limpiar</button>
         <button class="btn-ghost" onclick="faCargarTarifas()">Recargar</button>
+        <button class="btn-ghost" id="fa-btn-importar" onclick="faImportarHoja()">Importar desde la hoja</button>
+        <button class="btn-primary" id="fa-btn-nueva" onclick="faAbrirForm(null)">+ Nueva tarifa</button>
         <span id="fa-cuenta" style="font-size:11px;color:var(--text-muted);margin-left:auto;"></span>
       </div>
     </div>
@@ -244,9 +246,9 @@
             <th style="text-align:right;padding:8px 10px;">Tarifa</th><th style="text-align:right;padding:8px 10px;">Variable</th>
             <th style="text-align:right;padding:8px 10px;">Postura</th><th style="text-align:left;padding:8px 10px;">NDS</th>
             <th style="text-align:left;padding:8px 10px;">Puntos</th><th style="text-align:left;padding:8px 10px;">Vehículos</th>
-            <th style="text-align:left;padding:8px 10px;">Vigencia</th>
+            <th style="text-align:left;padding:8px 10px;">Vigencia</th><th></th>
           </tr></thead>
-          <tbody id="fa-tbody"><tr><td colspan="11" style="text-align:center;color:var(--text-faint);padding:24px;">Cargando...</td></tr></tbody>
+          <tbody id="fa-tbody"><tr><td colspan="12" style="text-align:center;color:var(--text-faint);padding:24px;">Cargando...</td></tr></tbody>
         </table>
       </div>
     </div>
@@ -366,6 +368,16 @@
     </div>
   </div>
 </div>
+
+<dialog id="fa-dlg" style="border:1px solid var(--border);border-radius:12px;padding:20px;background:var(--bg-800);color:var(--text);max-width:640px;width:92%;">
+  <p id="fa-dlg-titulo" style="font-size:14px;font-weight:700;margin-bottom:12px;"></p>
+  <div id="fa-dlg-campos" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;"></div>
+  <p id="fa-dlg-error" style="color:#dc2626;font-size:12px;margin-top:10px;"></p>
+  <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px;">
+    <button class="btn-ghost" onclick="document.getElementById('fa-dlg').close()">Cancelar</button>
+    <button class="btn-primary" onclick="faGuardarForm()">Guardar</button>
+  </div>
+</dialog>
 
 <script src="/sidebar.js"></script>
 <script>
@@ -998,6 +1010,9 @@ initCenco();
 // ══════════════════════════════════════════════════════
 let faTarifas = [];
 let faCargado = false;
+let faOrigen = 'hoja';
+let faEditId = null;
+const FA_CAMPOS = [['servicio','Servicio','text'],['geo','Geo / CT','text'],['tipo','Tipo','text'],['ruta','Ruta','text'],['tarifa','Tarifa','text'],['variable','Variable','text'],['postura','Postura','text'],['multa','Multa','text'],['nds','NDS','text'],['puntos','Puntos','text'],['tipoAutoAGP','Vehículos (Tipo Auto AGP)','text'],['obs','OBS','text'],['fechaInicio','Vigencia desde','date'],['fechaFin','Vigencia hasta','date']];
 const FA_API = '/api/tarifario/falabella/pago/tarifario';
 const faEsc = (v) => String(v ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const faMoney = (n) => (n === null || n === undefined ? '' : '$' + Math.round(n).toLocaleString('es-CL'));
@@ -1012,13 +1027,19 @@ function cambiarTarifario(cual) {
 }
 
 async function faCargarTarifas() {
-  document.getElementById('fa-tbody').innerHTML = '<tr><td colspan="11" style="text-align:center;color:var(--text-faint);padding:24px;">Cargando...</td></tr>';
+  document.getElementById('fa-tbody').innerHTML = '<tr><td colspan="12" style="text-align:center;color:var(--text-faint);padding:24px;">Cargando...</td></tr>';
   const r = await fetch(FA_API).then((x) => x.json()).catch((e) => ({ ok: false, error: e.message }));
   if (!r.ok) {
-    document.getElementById('fa-tbody').innerHTML = `<tr><td colspan="11" style="text-align:center;color:#dc2626;padding:24px;">${faEsc(r.error)}</td></tr>`;
+    document.getElementById('fa-tbody').innerHTML = `<tr><td colspan="12" style="text-align:center;color:#dc2626;padding:24px;">${faEsc(r.error)}</td></tr>`;
     return;
   }
-  faTarifas = r.tarifas; faCargado = true;
+  faTarifas = r.tarifas; faCargado = true; faOrigen = r.origen;
+  const propio = faOrigen === 'panel';
+  document.getElementById('fa-origen').innerHTML = propio
+    ? `Tarifario del panel (${r.info.total} líneas${r.info.importadoEn ? ', importado el ' + new Date(r.info.importadoEn).toLocaleDateString('es-CL') : ''}). Lo que edites aquí es lo que usa el Estado de Pago.`
+    : '<b>Mostrando la hoja "Pago Falabella"</b> (solo lectura). Pulsa "Importar desde la hoja" para pasarla al panel y poder editarla aquí; desde entonces el Estado de Pago usa el tarifario del panel.';
+  document.getElementById('fa-btn-nueva').style.display = propio ? '' : 'none';
+  document.getElementById('fa-btn-importar').textContent = propio ? 'Reimportar desde la hoja' : 'Importar desde la hoja';
   const llenar = (id, campo, vacio) => {
     const sel = document.getElementById(id); const v = sel.value;
     const vals = [...new Set(faTarifas.map((t) => t[campo]).filter(Boolean))].sort();
@@ -1041,15 +1062,52 @@ function faRenderTarifas() {
     && (!fe || ((!t.fechaInicio || t.fechaInicio <= fe) && (!t.fechaFin || t.fechaFin >= fe))));
   document.getElementById('fa-cuenta').textContent = `${filas.length} de ${faTarifas.length} tarifas`;
   const tb = document.getElementById('fa-tbody');
-  if (!filas.length) { tb.innerHTML = '<tr><td colspan="11" style="text-align:center;color:var(--text-faint);padding:24px;">Sin tarifas para este filtro.</td></tr>'; return; }
+  if (!filas.length) { tb.innerHTML = '<tr><td colspan="12" style="text-align:center;color:var(--text-faint);padding:24px;">Sin tarifas para este filtro.</td></tr>'; return; }
   tb.innerHTML = filas.slice(0, 1500).map((t) => `<tr style="border-top:1px solid var(--border);">
     <td style="padding:6px 10px;">${faEsc(t.servicio)}</td><td style="padding:6px 10px;">${faEsc(t.geo)}</td>
     <td style="padding:6px 10px;">${faEsc(t.tipo)}</td><td style="padding:6px 10px;">${faEsc(t.ruta)}</td>
     <td style="padding:6px 10px;text-align:right;">${faMoney(t.tarifa)}</td><td style="padding:6px 10px;text-align:right;">${faMoney(t.variable)}</td>
     <td style="padding:6px 10px;text-align:right;">${faMoney(t.postura)}</td><td style="padding:6px 10px;">${faEsc(t.nds)}</td>
     <td style="padding:6px 10px;">${faEsc(t.puntos)}</td><td style="padding:6px 10px;max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${faEsc(t.tipoAutoAGP)}">${faEsc(t.tipoAutoAGP)}</td>
-    <td style="padding:6px 10px;white-space:nowrap;">${faEsc(t.fechaInicio || '—')} → ${faEsc(t.fechaFin || '—')}</td></tr>`).join('')
-    + (filas.length > 1500 ? '<tr><td colspan="11" style="padding:8px;text-align:center;color:var(--text-muted);">Se muestran las primeras 1.500; usa los filtros.</td></tr>' : '');
+    <td style="padding:6px 10px;white-space:nowrap;">${faEsc(t.fechaInicio || '—')} → ${faEsc(t.fechaFin || '—')}</td>
+    <td style="padding:6px 10px;white-space:nowrap;">${faOrigen === 'panel' ? `<button class="btn-ghost" onclick="faAbrirForm('${faEsc(t.id)}')">Editar</button><button class="btn-danger-ghost" onclick="faEliminar('${faEsc(t.id)}')">Borrar</button>` : ''}</td></tr>`).join('')
+    + (filas.length > 1500 ? '<tr><td colspan="12" style="padding:8px;text-align:center;color:var(--text-muted);">Se muestran las primeras 1.500; usa los filtros.</td></tr>' : '');
+}
+
+async function faImportarHoja() {
+  const msg = faOrigen === 'panel' ? 'Esto REEMPLAZA todo el tarifario del panel (incluidas tus ediciones) por lo que hay hoy en la hoja. ¿Continuar?' : 'Se copiará la hoja "Pago Falabella" al panel. ¿Continuar?';
+  if (!confirm(msg)) return;
+  const r = await fetch(FA_API + '/importar-hoja', { method: 'POST' }).then((x) => x.json()).catch((e) => ({ ok: false, error: e.message }));
+  if (!r.ok) { alert(r.error); return; }
+  faCargarTarifas();
+}
+
+function faAbrirForm(id) {
+  faEditId = id;
+  const t = id ? faTarifas.find((x) => x.id === id) : {};
+  document.getElementById('fa-dlg-titulo').textContent = id ? 'Editar tarifa ' + id : 'Nueva tarifa';
+  document.getElementById('fa-dlg-error').textContent = '';
+  document.getElementById('fa-dlg-campos').innerHTML = FA_CAMPOS.map(([k, l, tipo]) =>
+    `<div><p class="label mb-1">${l}</p><input class="input" style="width:100%;" type="${tipo}" data-k="${k}" value="${faEsc(t[k] ?? '')}"></div>`).join('');
+  document.getElementById('fa-dlg').showModal();
+}
+
+async function faGuardarForm() {
+  const body = {};
+  document.querySelectorAll('#fa-dlg-campos [data-k]').forEach((i) => { body[i.dataset.k] = i.value; });
+  const r = await fetch(FA_API + '/tarifas' + (faEditId ? '/' + encodeURIComponent(faEditId) : ''), {
+    method: faEditId ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+  }).then((x) => x.json()).catch((e) => ({ ok: false, error: e.message }));
+  if (!r.ok) { document.getElementById('fa-dlg-error').textContent = r.error; return; }
+  document.getElementById('fa-dlg').close();
+  faCargarTarifas();
+}
+
+async function faEliminar(id) {
+  if (!confirm('¿Borrar la tarifa ' + id + '? Afecta los próximos cálculos del Estado de Pago.')) return;
+  const r = await fetch(FA_API + '/tarifas/' + encodeURIComponent(id), { method: 'DELETE' }).then((x) => x.json()).catch((e) => ({ ok: false, error: e.message }));
+  if (!r.ok) { alert(r.error); return; }
+  faCargarTarifas();
 }
 
 async function faProbar() {

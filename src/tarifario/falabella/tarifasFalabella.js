@@ -646,7 +646,7 @@ function calcularPagoFalabella(filas, tarifario, feriados, agp) {
     }
 
     salida.push({
-      ...base, tarifaBase: res.tb, tarifaVariable: res.tv, pago: res.pago, servicio: res.serv, observacion: (sinPatente ? '⚠️ Sin patente (tipo de vehículo desconocido) | ' : '') + res.obs,
+      ...base, tarifaBase: res.tb, tarifaVariable: res.tv, pago: res.pago, servicio: res.serv, observacion: (sinPatente ? '⚠️ Sin patente (tipo de vehículo desconocido) | ' : '') + (r.patenteInferida ? '🔎 Patente inferida por conductor | ' : '') + res.obs,
       estadoFila: res.pago === null ? 'SIN_TARIFA' : 'PAGADA', fallbackFecha: fallback, mixta: infoMixta.has(i),
     });
   });

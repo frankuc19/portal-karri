@@ -2,6 +2,7 @@ const crypto = require('crypto');
 const T = require('./tarifasFalabella');
 const S = require('./falabellaSheets');
 const F = require('./falabellaFuentes');
+const Store = require('./tarifarioStore');
 const { getSupabase } = require('../supabaseClient');
 
 // ─── Cálculo completo de un período (sin efectos sobre la planilla) ────────
@@ -13,10 +14,14 @@ async function calcularPeriodo({ fechaInicio, fechaFin, incluirSimpli = true }, 
   const errores = [];
 
   onProgreso?.({ fase: 'Leyendo tarifario, AGP y feriados...', diaActual: 0, totalDias: 0, diaLabel: '', filasAcumuladas: 0 });
+  // El tarifario editado en el panel manda; si aún no hay, se usa la hoja "Pago Falabella".
+  const propio = deps.tarifarioStore || Store;
+  const usarPropio = propio.hayTarifarioPropio();
   const [accesos, tarifarioCrudo, agp, feriados] = await Promise.all([
-    sheets.leerAccesos(), sheets.leerTarifarioCrudo(), sheets.leerMapaAGP(), sheets.leerFeriados(),
+    sheets.leerAccesos(), usarPropio ? null : sheets.leerTarifarioCrudo(), sheets.leerMapaAGP(), sheets.leerFeriados(),
   ]);
-  const tarifario = T.cargarTarifario(tarifarioCrudo);
+  const tarifario = usarPropio ? propio.paraMotor() : T.cargarTarifario(tarifarioCrudo);
+  if (!usarPropio) avisos.push('Se usó el tarifario de la hoja "Pago Falabella" (aún no se importó al panel).');
   if (feriados.aviso) avisos.push(`No se pudo leer "Feriados CL": el recargo solo aplica a domingos (${feriados.aviso}).`);
 
   const geo = await fuentes.descargarGeosort(fechaInicio, fechaFin, accesos, onProgreso);
@@ -29,6 +34,7 @@ async function calcularPeriodo({ fechaInicio, fechaFin, incluirSimpli = true }, 
   if (resGeo.sinFecha > 0) avisos.push(`${resGeo.sinFecha} fila(s) de Geosort sin fecha legible (ejemplo recibido: "${resGeo.ejemploSinFecha}").`);
 
   if (resGeo.patentesCompletadas > 0) avisos.push(`${resGeo.patentesCompletadas} fila(s) de Geosort venían sin patente y se completaron con la de otra fila de la misma ruta.`);
+  if (resGeo.patentesPorConductor > 0) avisos.push(`${resGeo.patentesPorConductor} fila(s) de Geosort sin patente se asignaron por conductor (la patente que ese conductor usó ese día o, si no, la más usada del período). Quedan marcadas en la observación como "patente inferida".`);
   if (resGeo.sinPatente > 0) avisos.push(`${resGeo.sinPatente} ruta(s) de Geosort sin patente en ninguna de sus filas: no se puede saber el tipo de vehículo (revisar en la tabla, quedan como "Sin patente").`);
 
   let filasSimpli = [];

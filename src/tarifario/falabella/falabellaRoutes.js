@@ -66,13 +66,49 @@ router.delete('/historial/:corridaId', async (req, res) => {
   res.json({ ok: true });
 });
 
-// ─── Tarifario (se lee en vivo de la pestaña "Pago Falabella") ─────────────
+// ─── Tarifario: editable en el panel (si aún no se importó, se muestra la hoja) ───
+const Store = require('./tarifarioStore');
+const sinPermiso = (req, res) => {
+  if (req.session?.role === 'beginner') { res.status(403).json({ ok: false, error: 'Tu perfil no puede editar el tarifario.' }); return true; }
+  return false;
+};
+
 router.get('/tarifario', async (_req, res) => {
   try {
+    if (Store.hayTarifarioPropio()) return res.json({ ok: true, origen: 'panel', info: Store.getInfo(), tarifas: Store.getTarifas() });
     const tarifario = T.cargarTarifario(await S.leerTarifarioCrudo());
-    const filas = tarifario.map((t) => ({ ...t, fechaInicio: t.fechaInicio === null ? null : T.isoDeMs(t.fechaInicio), fechaFin: t.fechaFin === null ? null : T.isoDeMs(t.fechaFin) }));
-    res.json({ ok: true, tarifas: filas });
+    const tarifas = tarifario.map((t, i) => ({ ...t, id: 'HOJA-' + (i + 1), fechaInicio: t.fechaInicio === null ? null : T.isoDeMs(t.fechaInicio), fechaFin: t.fechaFin === null ? null : T.isoDeMs(t.fechaFin) }));
+    res.json({ ok: true, origen: 'hoja', info: Store.getInfo(), tarifas });
   } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// Copia la hoja al panel (reemplaza todo el tarifario del panel).
+router.post('/tarifario/importar-hoja', async (req, res) => {
+  if (sinPermiso(req, res)) return;
+  try {
+    const n = Store.reemplazarDesdeFilasMotor(T.cargarTarifario(await S.leerTarifarioCrudo()));
+    res.json({ ok: true, total: n });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+const exigirPropio = (req, res, next) => {
+  if (sinPermiso(req, res)) return;
+  if (!Store.hayTarifarioPropio()) return res.status(409).json({ ok: false, error: 'Primero importa el tarifario de la hoja al panel.' });
+  next();
+};
+router.post('/tarifario/tarifas', exigirPropio, (req, res) => {
+  try { res.json({ ok: true, tarifa: Store.crear(req.body || {}) }); } catch (e) { res.status(400).json({ ok: false, error: e.message }); }
+});
+router.put('/tarifario/tarifas/:id', exigirPropio, (req, res) => {
+  try {
+    const t = Store.actualizar(req.params.id, req.body || {});
+    if (!t) return res.status(404).json({ ok: false, error: 'Tarifa no encontrada' });
+    res.json({ ok: true, tarifa: t });
+  } catch (e) { res.status(400).json({ ok: false, error: e.message }); }
+});
+router.delete('/tarifario/tarifas/:id', exigirPropio, (req, res) => {
+  if (!Store.eliminar(req.params.id)) return res.status(404).json({ ok: false, error: 'Tarifa no encontrada' });
+  res.json({ ok: true });
 });
 
 // Prueba de tarifa: qué se pagaría por una ruta con estos datos (misma lógica del Estado de Pago).
@@ -80,8 +116,8 @@ router.post('/tarifario/probar', async (req, res) => {
   const { ct, zona, tipoRuta, patente, vehiculo, terminados, total, fecha, origen } = req.body || {};
   if (!ct || !fecha) return res.status(400).json({ ok: false, error: 'Falta el CT o la fecha' });
   try {
-    const [crudo, agp, fer] = await Promise.all([S.leerTarifarioCrudo(), S.leerMapaAGP(), S.leerFeriados()]);
-    const tarifario = T.cargarTarifario(crudo);
+    const [crudo, agp, fer] = await Promise.all([Store.hayTarifarioPropio() ? null : S.leerTarifarioCrudo(), S.leerMapaAGP(), S.leerFeriados()]);
+    const tarifario = Store.hayTarifarioPropio() ? Store.paraMotor() : T.cargarTarifario(crudo);
     const term = Number(terminados) || 0, tot = Number(total) || term;
     let veh = vehiculo || '';
     if (!veh && patente) veh = agp.get(String(patente).replace(/[-\s.]+/g, '').toUpperCase()) || '';

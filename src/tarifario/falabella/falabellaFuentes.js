@@ -118,6 +118,7 @@ function resumirGeosort(header, filas, agp) {
   const h = header.map((x) => str(x).toLowerCase());
   const COL = {
     fecha: h.indexOf('fechainicioruta'), idruta: h.indexOf('idruta'), ct: h.indexOf('ct'), patente: h.indexOf('patente'),
+    driverrut: h.indexOf('driverrut'), drivername: h.indexOf('drivername'),
     estado: h.indexOf('estado'), direccion: h.indexOf('direccion'), comuna: h.indexOf('localidad'), region: h.indexOf('region'),
   };
   if (COL.region === -1) COL.region = h.indexOf('nombreregion');
@@ -145,6 +146,26 @@ function resumirGeosort(header, filas, agp) {
   }
   let patentesCompletadas = 0;
 
+  // Segundo respaldo: la patente que ese conductor (Driverrut, o Drivername si no
+  // hay RUT) usó ese mismo día en otra ruta y, si no, la que más usó en el período.
+  const iConductor = COL.driverrut !== -1 ? COL.driverrut : COL.drivername;
+  const conductorDe = (row) => (iConductor === -1 ? '' : str(row[iConductor]).toUpperCase().replace(/[.\s]/g, ''));
+  const usoDia = new Map(); // rut|fecha → Map(patente → n)
+  const usoTotal = new Map(); // rut → Map(patente → n)
+  const sumar = (m, k, p) => { if (!m.has(k)) m.set(k, new Map()); m.get(k).set(p, (m.get(k).get(p) || 0) + 1); };
+  const masUsada = (m) => { let best = '', n = 0; for (const [p, c] of m || []) if (c > n) { best = p; n = c; } return best; };
+  if (iConductor !== -1) {
+    for (const row of filas) {
+      const p = str(row[COL.patente]), c = conductorDe(row);
+      if (!p || !c) continue;
+      const f = parseFechaHora(row[COL.fecha]);
+      if (!f) continue;
+      sumar(usoDia, c + '|' + f.texto, p); sumar(usoTotal, c, p);
+    }
+  }
+  let patentesPorConductor = 0;
+  const inferidas = new Set();
+
   for (const row of filas) {
     const f = parseFechaHora(row[COL.fecha]);
     if (!f) { sinFecha++; if (ejemploSinFecha === null) ejemploSinFecha = str(row[COL.fecha]); continue; }
@@ -156,6 +177,12 @@ function resumirGeosort(header, filas, agp) {
       const alt = patenteDeRuta.get([f.texto, idruta, ct].join('|'));
       if (alt) { patente = alt; patentesCompletadas++; }
     }
+    let inferida = false;
+    if (!patente && iConductor !== -1) {
+      const c = conductorDe(row);
+      const alt = c ? (masUsada(usoDia.get(c + '|' + f.texto)) || masUsada(usoTotal.get(c))) : '';
+      if (alt) { patente = alt; inferida = true; patentesPorConductor++; }
+    }
     const comuna = COL.comuna !== -1 ? str(row[COL.comuna]).toUpperCase() : '';
     const region = COL.region !== -1 ? str(row[COL.region]) : '';
     const esRM = region === '' || region.toUpperCase().includes('METROPOLITANA');
@@ -165,6 +192,7 @@ function resumirGeosort(header, filas, agp) {
     if (f.hora !== null) tipoRuta = f.hora < 12 ? 'AM' : 'PM';
 
     const clave = [f.texto, idruta, ct, patente, zona].join('|');
+    if (inferida) inferidas.add(clave);
     if (!mapa.has(clave)) {
       mapa.set(clave, { f, idruta, ct, patente, zona, tipoRuta, sets: [new Set(), new Set(), new Set()], dirCt: new Set() });
       orden.push(clave);
@@ -187,10 +215,11 @@ function resumirGeosort(header, filas, agp) {
     return {
       origen: 'Geosort', fecha: e.f.texto, iso: e.f.iso, idruta: e.idruta, ct: e.ct, patente: e.patente, zona: e.zona,
       tipoRuta: e.tipoRuta, enRuta, pendiente, terminado, total: enRuta + pendiente + terminado, dirXCt: e.dirCt.size,
+      patenteInferida: inferidas.has(k),
       tipoVeh: agp.get(e.patente.replace(/[-\s.]+/g, '').toUpperCase()) || '',
     };
   });
-  return { rows, sinFecha, ejemploSinFecha, patentesCompletadas, sinPatente: rows.filter((r) => !r.patente).length };
+  return { rows, sinFecha, ejemploSinFecha, patentesCompletadas, patentesPorConductor, sinPatente: rows.filter((r) => !r.patente).length };
 }
 
 // ─── SimpliRoute ────────────────────────────────────────────────────────────
