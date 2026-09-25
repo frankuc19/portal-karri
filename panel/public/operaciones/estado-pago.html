@@ -219,7 +219,7 @@
     </div><!-- /vista-cenco -->
 
     <!-- ═════════════ Vista Falabella ═════════════ -->
-    <div id="vista-falabella" class="hidden" style="display:flex;flex-direction:column;gap:20px;">
+    <div id="vista-falabella" style="display:none;flex-direction:column;gap:20px;">
 
       <div class="card" style="padding:16px 20px;">
         <p style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:4px;">Procesar período — Falabella</p>
@@ -701,8 +701,9 @@ async function verCorridaHistorial(id) {
 // ══════════════════════════════════════════════════════
 function cambiarCliente(c) {
   const fa = c === 'falabella';
-  document.getElementById('vista-cenco').classList.toggle('hidden', fa);
-  document.getElementById('vista-falabella').classList.toggle('hidden', !fa);
+  // display inline (no la clase .hidden): el estilo inline gana y dejaba ambas vistas visibles.
+  document.getElementById('vista-cenco').style.display = fa ? 'none' : 'flex';
+  document.getElementById('vista-falabella').style.display = fa ? 'flex' : 'none';
   document.getElementById('pill-cenco').classList.toggle('activo', !fa);
   document.getElementById('pill-falabella').classList.toggle('activo', fa);
   try { localStorage.setItem('estado_pago_cliente', c); } catch (e) {}
