@@ -27,6 +27,8 @@ async function calcularPeriodo({ fechaInicio, fechaFin, incluirSimpli = true }, 
   const geo = await fuentes.descargarGeosort(fechaInicio, fechaFin, accesos, onProgreso);
   errores.push(...geo.errores);
   if (!geo.header || geo.filas.length === 0) {
+    const vencido = geo.errores.find((e) => e.tokenVencido);
+    if (vencido) throw new Error(vencido.motivo);
     if (geo.errores.length) throw new Error('No se pudo descargar Geosort: ' + geo.errores.map((e) => `${e.dia} (${e.motivo})`).join('; '));
     avisos.push('Geosort no devolvió filas en el rango elegido.');
   }

@@ -102,11 +102,11 @@ async function descargarGeosort(iniISO, finISO, accesos, onProgreso) {
       } else diasSinDatos.push(dia);
     } else {
       const cuerpo = await resp.text().catch(() => '');
-      errores.push({ dia, motivo: `HTTP ${resp.status}${cuerpo ? ': ' + cuerpo.slice(0, 160) : ''}` });
       if (resp.status === 401 || resp.status === 403) {
-        errores.push({ dia, motivo: 'Token o cookie de Geosort vencidos — actualízalos en la pestaña "Accesos" (B10 y B12) y vuelve a procesar.' });
+        errores.push({ dia, motivo: `El token de Geosort venció (HTTP ${resp.status}). Actualiza el token y la cookie en la pestaña "Accesos" de la planilla "EDP Karri Chile" (celdas B10 y B12) y vuelve a procesar.`, tokenVencido: true });
         break;
       }
+      errores.push({ dia, motivo: `HTTP ${resp.status}${cuerpo ? ': ' + cuerpo.slice(0, 160) : ''}` });
     }
     await dormir(200);
   }
