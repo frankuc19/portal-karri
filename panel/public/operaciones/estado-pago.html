@@ -21,6 +21,8 @@
   .pg-btn { min-width:30px;height:30px;border-radius:6px;border:1px solid rgba(15,23,22,.07);background:#f1f3f2;color:rgba(15,23,22,.5);font-size:12px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center; }
   .pg-btn:hover,.pg-btn.active { background:#f4f5f6;color:#12181a; }
   .pg-btn.active { color:#059669;border-color:rgba(5,150,105,.3); }
+  .btn-danger-ghost { background:none;color:rgba(220,38,38,.7);border:none;border-radius:6px;padding:4px 8px;cursor:pointer;display:inline-flex;align-items:center; }
+  .btn-danger-ghost:hover { background:rgba(220,38,38,.1);color:#dc2626; }
   .pg-btn:disabled { opacity:.35;cursor:default; }
   .sala-select { background:#f4f5f6;border:1px solid rgba(15,23,22,.08);color:#12181a;border-radius:6px;padding:4px 8px;font-size:12px; }
   .import-result { font-size:11.5px;border-radius:8px;padding:8px 12px;margin-top:8px; }
@@ -574,6 +576,9 @@ async function cargarHistorial() {
           <button class="btn-secondary" style="padding:4px 10px;font-size:11px;" onclick="window.open('/api/tarifario/cenco/pago/historial/${c.id}?formato=excel','_blank')">
             <i data-lucide="download" style="width:12px;height:12px;"></i>
           </button>
+          <button class="btn-danger-ghost" title="Borrar este cálculo" onclick="borrarCorridaHistorial('${c.id}', '${c.fecha_inicio} → ${c.fecha_fin}')">
+            <i data-lucide="trash-2" style="width:13px;height:13px;"></i>
+          </button>
         </div>
       </td>
     </tr>`).join('');
@@ -596,6 +601,17 @@ function adaptarResumenGuardado(c) {
     sinCoordenadas: c.sin_coordenadas, fueraDeTodosLosPoligonos: c.fuera_de_todos_los_poligonos,
     sinTarifaConfigurada: c.sin_tarifa_configurada, fueraDeVigencia: c.fuera_de_vigencia,
   };
+}
+
+async function borrarCorridaHistorial(id, rango) {
+  if (!confirm(`¿Borrar el cálculo del ${rango}?\n\nSe elimina de Supabase junto con todo su detalle y no se puede deshacer.`)) return;
+  const r = await fetch(`/api/tarifario/cenco/pago/historial/${id}`, { method: 'DELETE' }).then(x => x.json());
+  if (!r.ok) { alert(r.error || 'No se pudo borrar.'); return; }
+  if (corridaGuardadaActual === id) {
+    corridaGuardadaActual = null;
+    document.getElementById('resultados-wrap').classList.add('hidden');
+  }
+  cargarHistorial();
 }
 
 async function verCorridaHistorial(id) {

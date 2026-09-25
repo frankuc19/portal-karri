@@ -2,7 +2,7 @@ const { Router } = require('express');
 const XLSX = require('xlsx');
 const {
   iniciarProcesoPago, obtenerEstadoJob, obtenerResultadoJob,
-  obtenerHistorialCorridas, obtenerCorridaGuardada,
+  obtenerHistorialCorridas, obtenerCorridaGuardada, eliminarCorridaGuardada,
 } = require('./cencoPago');
 
 const router = Router();
@@ -72,6 +72,14 @@ router.get('/historial/:corridaId', async (req, res) => {
   }
 
   res.json({ ok: true, corrida: r.corrida, detalle: r.detalle });
+});
+
+// Borrar es irreversible: el rol Beginner solo consulta.
+router.delete('/historial/:corridaId', async (req, res) => {
+  if (req.session?.role === 'beginner') return res.status(403).json({ ok: false, error: 'Tu perfil no puede borrar cálculos guardados.' });
+  const r = await eliminarCorridaGuardada(req.params.corridaId);
+  if (r.error) return res.status(r.noEncontrada ? 404 : (r.error === 'SUPABASE_NO_CONFIGURADO' ? 503 : 500)).json({ ok: false, error: r.error });
+  res.json({ ok: true });
 });
 
 module.exports = router;

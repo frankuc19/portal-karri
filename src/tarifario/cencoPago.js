@@ -337,6 +337,18 @@ async function obtenerCorridaGuardada(corridaId) {
   return { corrida, detalle };
 }
 
+// Borra la corrida; el detalle se va solo con ella (on delete cascade en
+// detalle_pago). Pide de vuelta la fila borrada para distinguir "no existía"
+// de "se borró": Supabase no falla al borrar un id inexistente.
+async function eliminarCorridaGuardada(corridaId) {
+  const supabase = getSupabase();
+  if (!supabase) return { error: 'SUPABASE_NO_CONFIGURADO' };
+  const { data, error } = await supabase.from('corridas_pago').delete().eq('id', corridaId).select('id');
+  if (error) return { error: error.message };
+  if (!data || data.length === 0) return { noEncontrada: true, error: 'Corrida no encontrada.' };
+  return { eliminada: true };
+}
+
 // ─── Orquestación de jobs (transitorio — solo en memoria del proceso) ──────
 const JOBS = new Map(); // jobId -> { estado, resultado, creado }
 const JOB_TTL_MS = 2 * 60 * 60 * 1000; // 2 horas
@@ -401,5 +413,5 @@ function obtenerResultadoJob(jobId) {
 
 module.exports = {
   calcularPagos, iniciarProcesoPago, obtenerEstadoJob, obtenerResultadoJob,
-  obtenerHistorialCorridas, obtenerCorridaGuardada,
+  obtenerHistorialCorridas, obtenerCorridaGuardada, eliminarCorridaGuardada,
 };
