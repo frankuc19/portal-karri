@@ -604,6 +604,8 @@ function calcularPagoFalabella(filas, tarifario, feriados, agp) {
       base.tipoVeh = veh;
     }
 
+    const sinPatente = !str(r.patente) && !veh && !esSimpli(r.origen, ct);
+
     const hayNivel = nivelRaw !== '' && nivelRaw !== null && nivelRaw !== undefined;
     if (hayNivel && nivel < UMBRAL_NDS_MINIMO) {
       salida.push({ ...base, estadoFila: 'NDS_BAJO', observacion: '🚫 NDS ' + pct(nivel) + ' < ' + Math.round(UMBRAL_NDS_MINIMO * 100) + '% – ruta no considerada a pago' });
@@ -644,7 +646,7 @@ function calcularPagoFalabella(filas, tarifario, feriados, agp) {
     }
 
     salida.push({
-      ...base, tarifaBase: res.tb, tarifaVariable: res.tv, pago: res.pago, servicio: res.serv, observacion: res.obs,
+      ...base, tarifaBase: res.tb, tarifaVariable: res.tv, pago: res.pago, servicio: res.serv, observacion: (sinPatente ? '⚠️ Sin patente (tipo de vehículo desconocido) | ' : '') + res.obs,
       estadoFila: res.pago === null ? 'SIN_TARIFA' : 'PAGADA', fallbackFecha: fallback, mixta: infoMixta.has(i),
     });
   });

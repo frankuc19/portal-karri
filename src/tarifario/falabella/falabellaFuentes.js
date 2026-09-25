@@ -131,12 +131,31 @@ function resumirGeosort(header, filas, agp) {
   let sinFecha = 0;
   let ejemploSinFecha = null;
 
+  // Filas sin patente: se completa con la patente que otra fila de la MISMA ruta
+  // (mismo idruta + ct + fecha) sí trae, para no partir la ruta en dos ni perder
+  // el tipo de vehículo. Si ninguna la trae, queda sin patente y se avisa.
+  const patenteDeRuta = new Map();
+  for (const row of filas) {
+    const p = str(row[COL.patente]);
+    if (!p) continue;
+    const f = parseFechaHora(row[COL.fecha]);
+    if (!f) continue;
+    const k = [f.texto, str(row[COL.idruta]), str(row[COL.ct])].join('|');
+    if (!patenteDeRuta.has(k)) patenteDeRuta.set(k, p);
+  }
+  let patentesCompletadas = 0;
+
   for (const row of filas) {
     const f = parseFechaHora(row[COL.fecha]);
     if (!f) { sinFecha++; if (ejemploSinFecha === null) ejemploSinFecha = str(row[COL.fecha]); continue; }
     if (FECHAS_ERROR.has(f.texto)) continue;
 
-    const idruta = str(row[COL.idruta]), ct = str(row[COL.ct]), patente = str(row[COL.patente]);
+    const idruta = str(row[COL.idruta]), ct = str(row[COL.ct]);
+    let patente = str(row[COL.patente]);
+    if (!patente) {
+      const alt = patenteDeRuta.get([f.texto, idruta, ct].join('|'));
+      if (alt) { patente = alt; patentesCompletadas++; }
+    }
     const comuna = COL.comuna !== -1 ? str(row[COL.comuna]).toUpperCase() : '';
     const region = COL.region !== -1 ? str(row[COL.region]) : '';
     const esRM = region === '' || region.toUpperCase().includes('METROPOLITANA');
@@ -171,7 +190,7 @@ function resumirGeosort(header, filas, agp) {
       tipoVeh: agp.get(e.patente.replace(/[-\s.]+/g, '').toUpperCase()) || '',
     };
   });
-  return { rows, sinFecha, ejemploSinFecha };
+  return { rows, sinFecha, ejemploSinFecha, patentesCompletadas, sinPatente: rows.filter((r) => !r.patente).length };
 }
 
 // ─── SimpliRoute ────────────────────────────────────────────────────────────

@@ -28,6 +28,9 @@ async function calcularPeriodo({ fechaInicio, fechaFin, incluirSimpli = true }, 
   const resGeo = geo.header ? fuentes.resumirGeosort(geo.header, geo.filas, agp) : { rows: [], sinFecha: 0 };
   if (resGeo.sinFecha > 0) avisos.push(`${resGeo.sinFecha} fila(s) de Geosort sin fecha legible (ejemplo recibido: "${resGeo.ejemploSinFecha}").`);
 
+  if (resGeo.patentesCompletadas > 0) avisos.push(`${resGeo.patentesCompletadas} fila(s) de Geosort venían sin patente y se completaron con la de otra fila de la misma ruta.`);
+  if (resGeo.sinPatente > 0) avisos.push(`${resGeo.sinPatente} ruta(s) de Geosort sin patente en ninguna de sus filas: no se puede saber el tipo de vehículo (revisar en la tabla, quedan como "Sin patente").`);
+
   let filasSimpli = [];
   if (incluirSimpli) {
     try {

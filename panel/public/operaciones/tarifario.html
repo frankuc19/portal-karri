@@ -62,7 +62,10 @@
   <!-- Header -->
   <header style="background:var(--bg-800);border-bottom:1px solid var(--border);padding:14px 24px;flex-shrink:0;">
     <h1 style="font-size:16px;font-weight:700;color:var(--text);">Administrador de Tarifario</h1>
-    <p style="font-size:11px;color:var(--text-muted);margin-top:2px;">Cenco (por polígono)</p>
+    <div style="display:flex;gap:6px;margin-top:8px;">
+      <button class="btn-ghost" id="tabbtn-cenco" onclick="cambiarTarifario('cenco')" style="font-weight:700;">Cenco (por polígono)</button>
+      <button class="btn-ghost" id="tabbtn-falabella" onclick="cambiarTarifario('falabella')">Falabella (por CT / vehículo)</button>
+    </div>
   </header>
 
   <!-- ══════════════════ CENCO (por polígono) ══════════════════ -->
@@ -199,6 +202,55 @@
     </div>
   </div>
 </div>
+
+  <!-- ══════════════════ FALABELLA (por CT / vehículo / NDS) ══════════════════ -->
+  <div class="flex-1 overflow-y-auto" id="tab-falabella" style="display:none;padding:20px 24px;flex-direction:column;gap:20px;">
+    <div class="card" style="padding:16px 20px;">
+      <p style="font-size:13px;font-weight:600;color:var(--text);">Tarifario Falabella</p>
+      <p style="font-size:11px;color:var(--text-muted);margin-top:2px;">Se lee en vivo de la pestaña "Pago Falabella" de la planilla "EDP Karri Chile". Para cambiar una tarifa, edítala allí: el Estado de Pago y esta tabla la toman al instante.</p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;align-items:center;">
+        <select class="input" id="fa-f-servicio" style="width:190px;" onchange="faRenderTarifas()"><option value="">Todos los servicios</option></select>
+        <select class="input" id="fa-f-geo" style="width:230px;" onchange="faRenderTarifas()"><option value="">Todos los CT / Geo</option></select>
+        <input class="input" id="fa-f-fecha" type="date" style="width:150px;" onchange="faRenderTarifas()" title="Solo tarifas vigentes en esta fecha">
+        <button class="btn-ghost" onclick="faLimpiarFiltros()">Limpiar</button>
+        <button class="btn-ghost" onclick="faCargarTarifas()">Recargar</button>
+        <span id="fa-cuenta" style="font-size:11px;color:var(--text-muted);margin-left:auto;"></span>
+      </div>
+    </div>
+
+    <div class="card" style="padding:16px 20px;">
+      <p style="font-size:13px;font-weight:600;color:var(--text);">Probar tarifa</p>
+      <p style="font-size:11px;color:var(--text-muted);margin-top:2px;">Usa exactamente la misma lógica del Estado de Pago (NDS, tramos, ruta mixta, recargo domingo/feriado). Con patente se busca el tipo de vehículo en la pestaña "AGP".</p>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:12px;align-items:flex-end;">
+        <div><p class="label mb-1">CT</p><input class="input" id="fp-ct" style="width:190px;" placeholder="HUB XD"></div>
+        <div><p class="label mb-1">Zona</p><input class="input" id="fp-zona" style="width:120px;" value="Urbana"></div>
+        <div><p class="label mb-1">Ruta</p><select class="input" id="fp-tipo" style="width:80px;"><option>AM</option><option>PM</option></select></div>
+        <div><p class="label mb-1">Patente</p><input class="input" id="fp-patente" style="width:110px;" placeholder="RJZH-66"></div>
+        <div><p class="label mb-1">o vehículo</p><input class="input" id="fp-veh" style="width:150px;" placeholder="Small Van o 700"></div>
+        <div><p class="label mb-1">Terminados</p><input class="input" id="fp-term" type="number" style="width:90px;" value="80"></div>
+        <div><p class="label mb-1">Total</p><input class="input" id="fp-total" type="number" style="width:90px;" value="85"></div>
+        <div><p class="label mb-1">Fecha</p><input class="input" id="fp-fecha" type="date" style="width:150px;"></div>
+        <button class="btn-primary" onclick="faProbar()">Calcular</button>
+      </div>
+      <div id="fp-res" style="margin-top:12px;font-size:12px;color:var(--text);"></div>
+    </div>
+
+    <div class="card" style="padding:0;overflow:hidden;">
+      <div style="overflow:auto;max-height:520px;">
+        <table style="width:100%;font-size:12px;border-collapse:collapse;">
+          <thead style="position:sticky;top:0;background:var(--bg-800);"><tr>
+            <th style="text-align:left;padding:8px 10px;">Servicio</th><th style="text-align:left;padding:8px 10px;">Geo / CT</th>
+            <th style="text-align:left;padding:8px 10px;">Tipo</th><th style="text-align:left;padding:8px 10px;">Ruta</th>
+            <th style="text-align:right;padding:8px 10px;">Tarifa</th><th style="text-align:right;padding:8px 10px;">Variable</th>
+            <th style="text-align:right;padding:8px 10px;">Postura</th><th style="text-align:left;padding:8px 10px;">NDS</th>
+            <th style="text-align:left;padding:8px 10px;">Puntos</th><th style="text-align:left;padding:8px 10px;">Vehículos</th>
+            <th style="text-align:left;padding:8px 10px;">Vigencia</th>
+          </tr></thead>
+          <tbody id="fa-tbody"><tr><td colspan="11" style="text-align:center;color:var(--text-faint);padding:24px;">Cargando...</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
 
 <!-- ====================================================
      MODAL NUEVA TARIFA (para una geocerca que ya existe)
@@ -940,6 +992,81 @@ function mostrarResultadoImport(r, resumen) {
 // variables (mapaCenco, cencoZonas, etc.) que initCenco() usa.
 // ══════════════════════════════════════════════════════
 initCenco();
+
+// ══════════════════════════════════════════════════════
+// FALABELLA — tarifario en vivo desde la planilla
+// ══════════════════════════════════════════════════════
+let faTarifas = [];
+let faCargado = false;
+const FA_API = '/api/tarifario/falabella/pago/tarifario';
+const faEsc = (v) => String(v ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const faMoney = (n) => (n === null || n === undefined ? '' : '$' + Math.round(n).toLocaleString('es-CL'));
+
+function cambiarTarifario(cual) {
+  document.getElementById('tab-cenco').style.display = cual === 'cenco' ? 'flex' : 'none';
+  document.getElementById('tab-falabella').style.display = cual === 'falabella' ? 'flex' : 'none';
+  document.getElementById('tabbtn-cenco').style.fontWeight = cual === 'cenco' ? '700' : '400';
+  document.getElementById('tabbtn-falabella').style.fontWeight = cual === 'falabella' ? '700' : '400';
+  try { localStorage.setItem('tarifario_tab', cual); } catch (_) {}
+  if (cual === 'falabella' && !faCargado) faCargarTarifas();
+}
+
+async function faCargarTarifas() {
+  document.getElementById('fa-tbody').innerHTML = '<tr><td colspan="11" style="text-align:center;color:var(--text-faint);padding:24px;">Cargando...</td></tr>';
+  const r = await fetch(FA_API).then((x) => x.json()).catch((e) => ({ ok: false, error: e.message }));
+  if (!r.ok) {
+    document.getElementById('fa-tbody').innerHTML = `<tr><td colspan="11" style="text-align:center;color:#dc2626;padding:24px;">${faEsc(r.error)}</td></tr>`;
+    return;
+  }
+  faTarifas = r.tarifas; faCargado = true;
+  const llenar = (id, campo, vacio) => {
+    const sel = document.getElementById(id); const v = sel.value;
+    const vals = [...new Set(faTarifas.map((t) => t[campo]).filter(Boolean))].sort();
+    sel.innerHTML = `<option value="">${vacio}</option>` + vals.map((x) => `<option>${faEsc(x)}</option>`).join('');
+    sel.value = v;
+  };
+  llenar('fa-f-servicio', 'servicio', 'Todos los servicios');
+  llenar('fa-f-geo', 'geo', 'Todos los CT / Geo');
+  faRenderTarifas();
+}
+
+function faLimpiarFiltros() {
+  ['fa-f-servicio', 'fa-f-geo', 'fa-f-fecha'].forEach((id) => { document.getElementById(id).value = ''; });
+  faRenderTarifas();
+}
+
+function faRenderTarifas() {
+  const sv = document.getElementById('fa-f-servicio').value, geo = document.getElementById('fa-f-geo').value, fe = document.getElementById('fa-f-fecha').value;
+  const filas = faTarifas.filter((t) => (!sv || t.servicio === sv) && (!geo || t.geo === geo)
+    && (!fe || ((!t.fechaInicio || t.fechaInicio <= fe) && (!t.fechaFin || t.fechaFin >= fe))));
+  document.getElementById('fa-cuenta').textContent = `${filas.length} de ${faTarifas.length} tarifas`;
+  const tb = document.getElementById('fa-tbody');
+  if (!filas.length) { tb.innerHTML = '<tr><td colspan="11" style="text-align:center;color:var(--text-faint);padding:24px;">Sin tarifas para este filtro.</td></tr>'; return; }
+  tb.innerHTML = filas.slice(0, 1500).map((t) => `<tr style="border-top:1px solid var(--border);">
+    <td style="padding:6px 10px;">${faEsc(t.servicio)}</td><td style="padding:6px 10px;">${faEsc(t.geo)}</td>
+    <td style="padding:6px 10px;">${faEsc(t.tipo)}</td><td style="padding:6px 10px;">${faEsc(t.ruta)}</td>
+    <td style="padding:6px 10px;text-align:right;">${faMoney(t.tarifa)}</td><td style="padding:6px 10px;text-align:right;">${faMoney(t.variable)}</td>
+    <td style="padding:6px 10px;text-align:right;">${faMoney(t.postura)}</td><td style="padding:6px 10px;">${faEsc(t.nds)}</td>
+    <td style="padding:6px 10px;">${faEsc(t.puntos)}</td><td style="padding:6px 10px;max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${faEsc(t.tipoAutoAGP)}">${faEsc(t.tipoAutoAGP)}</td>
+    <td style="padding:6px 10px;white-space:nowrap;">${faEsc(t.fechaInicio || '—')} → ${faEsc(t.fechaFin || '—')}</td></tr>`).join('')
+    + (filas.length > 1500 ? '<tr><td colspan="11" style="padding:8px;text-align:center;color:var(--text-muted);">Se muestran las primeras 1.500; usa los filtros.</td></tr>' : '');
+}
+
+async function faProbar() {
+  const v = (id) => document.getElementById(id).value;
+  const out = document.getElementById('fp-res');
+  out.textContent = 'Calculando...';
+  const r = await fetch(FA_API + '/probar', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ct: v('fp-ct'), zona: v('fp-zona'), tipoRuta: v('fp-tipo'), patente: v('fp-patente'), vehiculo: v('fp-veh'), terminados: v('fp-term'), total: v('fp-total'), fecha: v('fp-fecha') }),
+  }).then((x) => x.json()).catch((e) => ({ ok: false, error: e.message }));
+  if (!r.ok) { out.innerHTML = `<span style="color:#dc2626;">${faEsc(r.error)}</span>`; return; }
+  const x = r.resultado;
+  out.innerHTML = `<b>${x.pago === null ? 'Sin tarifa' : faMoney(x.pago)}</b> — ${faEsc(x.estadoFila)} · vehículo: ${faEsc(r.vehiculo || '(desconocido)')}
+    · servicio: ${faEsc(x.servicio || '—')} · base ${faMoney(x.tarifaBase) || '—'} · variable ${faMoney(x.tarifaVariable) || '—'}<br><span style="color:var(--text-muted);">${faEsc(x.observacion)}</span>`;
+}
+document.getElementById('fp-fecha').value = new Date().toISOString().slice(0, 10);
+try { if (localStorage.getItem('tarifario_tab') === 'falabella') cambiarTarifario('falabella'); } catch (_) {}
 </script>
 </body>
 </html>

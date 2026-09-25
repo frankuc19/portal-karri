@@ -3,6 +3,9 @@ const XLSX = require('xlsx');
 const P = require('./falabellaPago');
 const { obtenerHistorialCorridas, eliminarCorridaGuardada } = require('../cencoPago');
 
+const T = require('./tarifasFalabella');
+const S = require('./falabellaSheets');
+
 const router = Router();
 
 function excelDe(detalle) {
@@ -61,6 +64,33 @@ router.delete('/historial/:corridaId', async (req, res) => {
   const r = await eliminarCorridaGuardada(req.params.corridaId);
   if (r.error) return res.status(r.noEncontrada ? 404 : (r.error === 'SUPABASE_NO_CONFIGURADO' ? 503 : 500)).json({ ok: false, error: r.error });
   res.json({ ok: true });
+});
+
+// ─── Tarifario (se lee en vivo de la pestaña "Pago Falabella") ─────────────
+router.get('/tarifario', async (_req, res) => {
+  try {
+    const tarifario = T.cargarTarifario(await S.leerTarifarioCrudo());
+    const filas = tarifario.map((t) => ({ ...t, fechaInicio: t.fechaInicio === null ? null : T.isoDeMs(t.fechaInicio), fechaFin: t.fechaFin === null ? null : T.isoDeMs(t.fechaFin) }));
+    res.json({ ok: true, tarifas: filas });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// Prueba de tarifa: qué se pagaría por una ruta con estos datos (misma lógica del Estado de Pago).
+router.post('/tarifario/probar', async (req, res) => {
+  const { ct, zona, tipoRuta, patente, vehiculo, terminados, total, fecha, origen } = req.body || {};
+  if (!ct || !fecha) return res.status(400).json({ ok: false, error: 'Falta el CT o la fecha' });
+  try {
+    const [crudo, agp, fer] = await Promise.all([S.leerTarifarioCrudo(), S.leerMapaAGP(), S.leerFeriados()]);
+    const tarifario = T.cargarTarifario(crudo);
+    const term = Number(terminados) || 0, tot = Number(total) || term;
+    let veh = vehiculo || '';
+    if (!veh && patente) veh = agp.get(String(patente).replace(/[-\s.]+/g, '').toUpperCase()) || '';
+    const salida = T.calcularPagoFalabella([{
+      origen: origen || 'Geosort', fecha, iso: fecha, idruta: 'PRUEBA', ct, patente: patente || '', zona: zona || 'Urbana',
+      tipoRuta: tipoRuta || 'AM', terminado: term, total: tot, tipoVeh: veh, nivel: tot > 0 ? term / tot : '',
+    }], tarifario, fer.set, agp);
+    res.json({ ok: true, vehiculo: veh, resultado: salida[0] });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
 module.exports = router;
