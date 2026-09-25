@@ -206,54 +206,60 @@
   </div>
   <!-- ══════════════════ FALABELLA (por CT / vehículo / NDS) ══════════════════ -->
   <div class="flex-1 overflow-y-auto" id="tab-falabella" style="display:none;padding:20px 24px;flex-direction:column;gap:20px;">
-    <div class="card" style="padding:16px 20px;">
-      <p style="font-size:13px;font-weight:600;color:var(--text);">Tarifario Falabella</p>
-      <p style="font-size:11px;color:var(--text-muted);margin-top:2px;"><span id="fa-origen"></span></p>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;align-items:center;">
-        <select class="input" id="fa-f-servicio" style="width:190px;" onchange="faRenderTarifas()"><option value="">Todos los servicios</option></select>
-        <select class="input" id="fa-f-geo" style="width:230px;" onchange="faRenderTarifas()"><option value="">Todos los CT / Geo</option></select>
-        <input class="input" id="fa-f-fecha" type="date" style="width:150px;" onchange="faRenderTarifas()" title="Solo tarifas vigentes en esta fecha">
-        <button class="btn-ghost" onclick="faLimpiarFiltros()">Limpiar</button>
-        <button class="btn-ghost" onclick="faCargarTarifas()">Recargar</button>
-        <button class="btn-ghost" id="fa-btn-importar" onclick="faImportarHoja()">Importar desde la hoja</button>
-        <button class="btn-primary" id="fa-btn-nueva" onclick="faAbrirForm(null)">+ Nueva tarifa</button>
-        <span id="fa-cuenta" style="font-size:11px;color:var(--text-muted);margin-left:auto;"></span>
-      </div>
-    </div>
-
-    <div class="card" style="padding:16px 20px;">
-      <p style="font-size:13px;font-weight:600;color:var(--text);">Probar tarifa</p>
-      <p style="font-size:11px;color:var(--text-muted);margin-top:2px;">Usa exactamente la misma lógica del Estado de Pago (NDS, tramos, ruta mixta, recargo domingo/feriado). Con patente se busca el tipo de vehículo en la pestaña "AGP".</p>
-      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:12px;align-items:flex-end;">
-        <div><p class="label mb-1">CT</p><input class="input" id="fp-ct" style="width:190px;" placeholder="HUB XD"></div>
-        <div><p class="label mb-1">Zona</p><input class="input" id="fp-zona" style="width:120px;" value="Urbana"></div>
-        <div><p class="label mb-1">Ruta</p><select class="input" id="fp-tipo" style="width:80px;"><option>AM</option><option>PM</option></select></div>
-        <div><p class="label mb-1">Patente</p><input class="input" id="fp-patente" style="width:110px;" placeholder="RJZH-66"></div>
-        <div><p class="label mb-1">o vehículo</p><input class="input" id="fp-veh" style="width:150px;" placeholder="Small Van o 700"></div>
-        <div><p class="label mb-1">Terminados</p><input class="input" id="fp-term" type="number" style="width:90px;" value="80"></div>
-        <div><p class="label mb-1">Total</p><input class="input" id="fp-total" type="number" style="width:90px;" value="85"></div>
-        <div><p class="label mb-1">Fecha</p><input class="input" id="fp-fecha" type="date" style="width:150px;"></div>
-        <button class="btn-primary" onclick="faProbar()">Calcular</button>
-      </div>
-      <div id="fp-res" style="margin-top:12px;font-size:12px;color:var(--text);"></div>
-    </div>
-
     <div class="card" style="padding:0;overflow:hidden;">
-      <div style="overflow:auto;max-height:520px;">
-        <table style="width:100%;font-size:12px;border-collapse:collapse;">
+      <div style="padding:14px 18px;border-bottom:1px solid var(--border);display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
+        <select class="input" id="fa-f-servicio" style="width:170px;" onchange="faRenderTarifas()"><option value="">Todos los servicios</option></select>
+        <select class="input" id="fa-f-geo" style="width:210px;" onchange="faRenderTarifas()"><option value="">Todos los CT / Geo</option></select>
+        <input class="input" id="fa-f-fecha" type="date" style="width:140px;" onchange="faRenderTarifas()" title="Solo tarifas vigentes en esta fecha">
+        <button class="btn-ghost" onclick="faLimpiarFiltros()">Limpiar</button>
+        <span id="fa-cuenta" style="font-size:11px;color:var(--text-muted);"></span>
+        <div style="margin-left:auto;display:flex;gap:8px;align-items:center;">
+          <button class="btn-ghost" onclick="faAbrirProbar()">Probar tarifa</button>
+          <button class="btn-primary" id="fa-btn-nueva" onclick="faAbrirForm(null)">+ Nueva tarifa</button>
+          <details style="position:relative;">
+            <summary class="btn-ghost" style="list-style:none;cursor:pointer;font-size:16px;line-height:1;" title="Más acciones">⋯</summary>
+            <div style="position:absolute;right:0;top:30px;z-index:20;background:var(--bg-800);border:1px solid var(--border);border-radius:8px;padding:4px;min-width:200px;box-shadow:0 6px 20px rgba(0,0,0,.12);">
+              <button class="btn-ghost" style="width:100%;" onclick="this.closest('details').open=false;faCargarTarifas()">Recargar</button>
+              <button class="btn-ghost" style="width:100%;" id="fa-btn-importar" onclick="this.closest('details').open=false;faImportarHoja()">Reimportar desde la hoja</button>
+            </div>
+          </details>
+        </div>
+      </div>
+      <p style="padding:8px 18px;font-size:11px;color:var(--text-muted);border-bottom:1px solid var(--border);"><span id="fa-origen"></span></p>
+      <div style="overflow:auto;max-height:calc(100vh - 270px);">
+        <table style="width:100%;font-size:12px;border-collapse:collapse;table-layout:fixed;">
+          <colgroup><col style="width:11%"><col style="width:17%"><col style="width:7%"><col style="width:14%"><col style="width:9%"><col style="width:14%"><col style="width:13%"><col style="width:10%"><col style="width:5%"></colgroup>
           <thead style="position:sticky;top:0;background:var(--bg-800);"><tr>
             <th style="text-align:left;padding:8px 10px;">Servicio</th><th style="text-align:left;padding:8px 10px;">Geo / CT</th>
             <th style="text-align:left;padding:8px 10px;">Tipo</th><th style="text-align:left;padding:8px 10px;">Ruta</th>
-            <th style="text-align:right;padding:8px 10px;">Tarifa</th><th style="text-align:right;padding:8px 10px;">Variable</th>
-            <th style="text-align:right;padding:8px 10px;">Postura</th><th style="text-align:left;padding:8px 10px;">NDS</th>
-            <th style="text-align:left;padding:8px 10px;">Puntos</th><th style="text-align:left;padding:8px 10px;">Vehículos</th>
-            <th style="text-align:left;padding:8px 10px;">Vigencia</th><th></th>
+            <th style="text-align:right;padding:8px 10px;">Tarifa</th><th style="text-align:left;padding:8px 10px;">Detalle</th>
+            <th style="text-align:left;padding:8px 10px;">Vehículos</th><th style="text-align:left;padding:8px 10px;">Vigencia</th><th></th>
           </tr></thead>
-          <tbody id="fa-tbody"><tr><td colspan="12" style="text-align:center;color:var(--text-faint);padding:24px;">Cargando...</td></tr></tbody>
+          <tbody id="fa-tbody"><tr><td colspan="9" style="text-align:center;color:var(--text-faint);padding:24px;">Cargando...</td></tr></tbody>
         </table>
       </div>
     </div>
   </div>
+
+  <dialog id="fp-dlg" style="border:1px solid var(--border);border-radius:12px;padding:20px;background:var(--bg-800);color:var(--text);max-width:600px;width:92%;">
+    <p style="font-size:14px;font-weight:700;">Probar tarifa</p>
+    <p style="font-size:11px;color:var(--text-muted);margin:4px 0 12px;">Usa la misma lógica del Estado de Pago. Con patente se busca el vehículo en "AGP".</p>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+      <div><p class="label mb-1">CT</p><input class="input" id="fp-ct" style="width:100%;" placeholder="HUB XD"></div>
+      <div><p class="label mb-1">Zona</p><input class="input" id="fp-zona" style="width:100%;" value="Urbana"></div>
+      <div><p class="label mb-1">Ruta</p><select class="input" id="fp-tipo" style="width:100%;"><option>AM</option><option>PM</option></select></div>
+      <div><p class="label mb-1">Fecha</p><input class="input" id="fp-fecha" type="date" style="width:100%;"></div>
+      <div><p class="label mb-1">Patente</p><input class="input" id="fp-patente" style="width:100%;" placeholder="RJZH-66"></div>
+      <div><p class="label mb-1">o vehículo</p><input class="input" id="fp-veh" style="width:100%;" placeholder="Small Van o 700"></div>
+      <div><p class="label mb-1">Terminados</p><input class="input" id="fp-term" type="number" style="width:100%;" value="80"></div>
+      <div><p class="label mb-1">Total</p><input class="input" id="fp-total" type="number" style="width:100%;" value="85"></div>
+    </div>
+    <div id="fp-res" style="margin-top:12px;font-size:12px;min-height:34px;"></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px;">
+      <button class="btn-ghost" onclick="document.getElementById('fp-dlg').close()">Cerrar</button>
+      <button class="btn-primary" onclick="faProbar()">Calcular</button>
+    </div>
+  </dialog>
 </div>
 
 
@@ -1031,17 +1037,17 @@ function cambiarTarifario(cual) {
 }
 
 async function faCargarTarifas() {
-  document.getElementById('fa-tbody').innerHTML = '<tr><td colspan="12" style="text-align:center;color:var(--text-faint);padding:24px;">Cargando...</td></tr>';
+  document.getElementById('fa-tbody').innerHTML = '<tr><td colspan="9" style="text-align:center;color:var(--text-faint);padding:24px;">Cargando...</td></tr>';
   const r = await fetch(FA_API).then((x) => x.json()).catch((e) => ({ ok: false, error: e.message }));
   if (!r.ok) {
-    document.getElementById('fa-tbody').innerHTML = `<tr><td colspan="12" style="text-align:center;color:#dc2626;padding:24px;">${faEsc(r.error)}</td></tr>`;
+    document.getElementById('fa-tbody').innerHTML = `<tr><td colspan="9" style="text-align:center;color:#dc2626;padding:24px;">${faEsc(r.error)}</td></tr>`;
     return;
   }
   faTarifas = r.tarifas; faCargado = true; faOrigen = r.origen;
   const propio = faOrigen === 'panel';
   document.getElementById('fa-origen').innerHTML = propio
-    ? `Tarifario del panel (${r.info.total} líneas${r.info.importadoEn ? ', importado el ' + new Date(r.info.importadoEn).toLocaleDateString('es-CL') : ''}). Lo que edites aquí es lo que usa el Estado de Pago.`
-    : '<b>Mostrando la hoja "Pago Falabella"</b> (solo lectura). Pulsa "Importar desde la hoja" para pasarla al panel y poder editarla aquí; desde entonces el Estado de Pago usa el tarifario del panel.';
+    ? `Tarifario del panel · ${r.info.total} líneas${r.info.importadoEn ? ' · copiado de la hoja el ' + new Date(r.info.importadoEn).toLocaleDateString('es-CL') : ''} · lo que editas se usa en el Estado de Pago`
+    : 'Mostrando la hoja "Pago Falabella" (solo lectura)';
   document.getElementById('fa-btn-nueva').style.display = propio ? '' : 'none';
   document.getElementById('fa-btn-importar').textContent = propio ? 'Reimportar desde la hoja' : 'Importar desde la hoja';
   const llenar = (id, campo, vacio) => {
@@ -1064,18 +1070,23 @@ function faRenderTarifas() {
   const sv = document.getElementById('fa-f-servicio').value, geo = document.getElementById('fa-f-geo').value, fe = document.getElementById('fa-f-fecha').value;
   const filas = faTarifas.filter((t) => (!sv || t.servicio === sv) && (!geo || t.geo === geo)
     && (!fe || ((!t.fechaInicio || t.fechaInicio <= fe) && (!t.fechaFin || t.fechaFin >= fe))));
-  document.getElementById('fa-cuenta').textContent = `${filas.length} de ${faTarifas.length} tarifas`;
+  document.getElementById('fa-cuenta').textContent = `${filas.length} de ${faTarifas.length}`;
   const tb = document.getElementById('fa-tbody');
-  if (!filas.length) { tb.innerHTML = '<tr><td colspan="12" style="text-align:center;color:var(--text-faint);padding:24px;">Sin tarifas para este filtro.</td></tr>'; return; }
-  tb.innerHTML = filas.slice(0, 1500).map((t) => `<tr style="border-top:1px solid var(--border);">
-    <td style="padding:6px 10px;">${faEsc(t.servicio)}</td><td style="padding:6px 10px;">${faEsc(t.geo)}</td>
-    <td style="padding:6px 10px;">${faEsc(t.tipo)}</td><td style="padding:6px 10px;">${faEsc(t.ruta)}</td>
-    <td style="padding:6px 10px;text-align:right;">${faMoney(t.tarifa)}</td><td style="padding:6px 10px;text-align:right;">${faMoney(t.variable)}</td>
-    <td style="padding:6px 10px;text-align:right;">${faMoney(t.postura)}</td><td style="padding:6px 10px;">${faEsc(t.nds)}</td>
-    <td style="padding:6px 10px;">${faEsc(t.puntos)}</td><td style="padding:6px 10px;max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${faEsc(t.tipoAutoAGP)}">${faEsc(t.tipoAutoAGP)}</td>
-    <td style="padding:6px 10px;white-space:nowrap;">${faEsc(t.fechaInicio || '—')} → ${faEsc(t.fechaFin || '—')}</td>
-    <td style="padding:6px 10px;white-space:nowrap;">${faOrigen === 'panel' ? `<button class="btn-ghost" onclick="faAbrirForm('${faEsc(t.id)}')">Editar</button><button class="btn-danger-ghost" onclick="faEliminar('${faEsc(t.id)}')">Borrar</button>` : ''}</td></tr>`).join('')
-    + (filas.length > 1500 ? '<tr><td colspan="12" style="padding:8px;text-align:center;color:var(--text-muted);">Se muestran las primeras 1.500; usa los filtros.</td></tr>' : '');
+  if (!filas.length) { tb.innerHTML = '<tr><td colspan="9" style="text-align:center;color:var(--text-faint);padding:24px;">Sin tarifas para este filtro.</td></tr>'; return; }
+  const cel = 'padding:7px 10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
+  const chip = (k, v) => (v === null || v === undefined || v === '' ? '' : `<span style="display:inline-block;margin:1px 4px 1px 0;padding:1px 7px;border-radius:999px;background:rgba(15,23,22,.06);font-size:11px;">${k} ${faEsc(v)}</span>`);
+  tb.innerHTML = filas.slice(0, 1500).map((t) => {
+    const det = chip('Var.', t.variable === null ? '' : faMoney(t.variable)) + chip('Post.', t.postura === null ? '' : faMoney(t.postura)) + chip('NDS', t.nds) + chip('', t.puntos);
+    const vig = (t.fechaInicio || t.fechaFin) ? `${faEsc(t.fechaInicio || '…')} → ${faEsc(t.fechaFin || '…')}` : 'Siempre';
+    const acc = faOrigen === 'panel' ? `<button class="btn-ghost" title="Editar" onclick="faAbrirForm('${faEsc(t.id)}')">✎</button><button class="btn-danger-ghost" title="Borrar" onclick="faEliminar('${faEsc(t.id)}')">✕</button>` : '';
+    return `<tr style="border-top:1px solid var(--border);">
+    <td style="${cel}" title="${faEsc(t.servicio)}">${faEsc(t.servicio)}</td><td style="${cel}" title="${faEsc(t.geo)}">${faEsc(t.geo)}</td>
+    <td style="${cel}">${faEsc(t.tipo)}</td><td style="${cel}" title="${faEsc(t.ruta)}">${faEsc(t.ruta)}</td>
+    <td style="${cel}text-align:right;font-weight:600;">${faMoney(t.tarifa) || '—'}</td><td style="padding:5px 10px;">${det || '<span style="color:var(--text-faint);">—</span>'}</td>
+    <td style="${cel}" title="${faEsc(t.tipoAutoAGP)}">${faEsc(t.tipoAutoAGP)}</td><td style="${cel}font-size:11px;color:var(--text-muted);">${vig}</td>
+    <td style="padding:2px 4px;white-space:nowrap;text-align:right;">${acc}</td></tr>`;
+  }).join('')
+    + (filas.length > 1500 ? '<tr><td colspan="9" style="padding:8px;text-align:center;color:var(--text-muted);">Se muestran las primeras 1.500; usa los filtros.</td></tr>' : '');
 }
 
 async function faImportarHoja() {
@@ -1112,6 +1123,11 @@ async function faEliminar(id) {
   const r = await fetch(FA_API + '/tarifas/' + encodeURIComponent(id), { method: 'DELETE' }).then((x) => x.json()).catch((e) => ({ ok: false, error: e.message }));
   if (!r.ok) { alert(r.error); return; }
   faCargarTarifas();
+}
+
+function faAbrirProbar() {
+  document.getElementById('fp-res').innerHTML = '';
+  document.getElementById('fp-dlg').showModal();
 }
 
 async function faProbar() {
