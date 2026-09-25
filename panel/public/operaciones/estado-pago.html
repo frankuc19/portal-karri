@@ -400,6 +400,11 @@ async function cargarResultado() {
   if (r.errores && r.errores.length > 0) {
     mensajes.push(`${r.errores.length} día(s) con error al descargar: ` + r.errores.map(e => `${e.dia} (${e.motivo})`).join('; '));
   }
+  if (r.resumen.sinFechaPedido > 0) {
+    const ej = r.detalle.find(f => f.motivo === 'SIN_FECHA_PEDIDO');
+    const col = r.encabezados && r.encabezados[10] ? ` (columna "${r.encabezados[10]}")` : '';
+    mensajes.push(`${r.resumen.sinFechaPedido} pedido(s) sin fecha legible${col}. Valor recibido de ejemplo: "${ej?.valorFecha ?? ''}" — pásaselo a soporte para ajustar el formato.`);
+  }
   if (r.resumen.totalPedidos === 0 && !(r.errores && r.errores.length)) {
     mensajes.push('La API de Cencosud respondió sin errores pero sin pedidos' + (r.diasSinPedidos?.length ? ` en ${r.diasSinPedidos.length} día(s) (${r.diasSinPedidos.join(', ')})` : '') + ' — revisa el rango de fechas.');
   }
@@ -472,7 +477,7 @@ function renderDetalle() {
     ? '<tr><td colspan="11" style="text-align:center;color:var(--text-faint);padding:24px;">Sin pedidos en este período.</td></tr>'
     : pagina.map(f => {
         const badge = f.motivo
-          ? `<span class="motivo-badge motivo-warn">${MOTIVO_LABEL[f.motivo] || f.motivo}</span>`
+          ? `<span class="motivo-badge motivo-warn" ${f.valorFecha !== undefined ? `title='Valor recibido: "${String(f.valorFecha).replace(/'/g, '')}"'` : ''}>${MOTIVO_LABEL[f.motivo] || f.motivo}</span>`
           : `<span class="motivo-badge motivo-ok">OK</span>`;
         return `
         <tr>

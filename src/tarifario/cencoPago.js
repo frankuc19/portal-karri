@@ -56,11 +56,32 @@ function componentesFecha(valor) {
       hours: valor.getUTCHours(), minutes: valor.getUTCMinutes(),
     };
   }
+  if (typeof valor === 'number') {
+    // Serial de Excel (días desde 1899-12-30) que llegó sin convertir a fecha.
+    if (valor < 20000 || valor > 80000) return null;
+    const d = new Date(Math.round((valor - 25569) * 86400000));
+    return { year: d.getUTCFullYear(), month: d.getUTCMonth(), day: d.getUTCDate(), hours: d.getUTCHours(), minutes: d.getUTCMinutes() };
+  }
   const s = String(valor).trim();
-  const soloFecha = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  if (soloFecha) return { year: +soloFecha[1], month: +soloFecha[2] - 1, day: +soloFecha[3], hours: 0, minutes: 0 };
+  let m;
+  // Chile escribe día primero: 23/09/2026, 23-09-2026 10:15, 23.09.2026
+  if ((m = s.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})(?:[ T,]+(\d{1,2}):(\d{2}))?/))) {
+    return { year: +m[3], month: +m[2] - 1, day: +m[1], hours: +(m[4] || 0), minutes: +(m[5] || 0) };
+  }
+  // Año primero, con o sin hora, sin huso: 2026-09-23, 2026/09/23 10:15:00
+  if ((m = s.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})(?:[ T](\d{1,2}):(\d{2}))?(?::\d{2}(?:\.\d+)?)?$/))) {
+    return { year: +m[1], month: +m[2] - 1, day: +m[3], hours: +(m[4] || 0), minutes: +(m[5] || 0) };
+  }
   const d = new Date(s);
   if (Number.isNaN(d.getTime())) return null;
+  // ISO con Z u offset: es un instante UTC — se lleva a hora de Chile (el
+  // servidor corre en UTC, y un pedido a las 22:00 en Chile ya es "mañana" en UTC).
+  if (/(Z|[+-]\d{2}:?\d{2})$/i.test(s)) {
+    const p = Object.fromEntries(new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'America/Santiago', hourCycle: 'h23', year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: 'numeric',
+    }).formatToParts(d).map(x => [x.type, x.value]));
+    return { year: +p.year, month: +p.month - 1, day: +p.day, hours: +p.hour, minutes: +p.minute };
+  }
   return { year: d.getFullYear(), month: d.getMonth(), day: d.getDate(), hours: d.getHours(), minutes: d.getMinutes() };
 }
 
@@ -151,6 +172,7 @@ function calcularPagos(filas, { festivos = [] } = {}) {
     porSala: {}, // sala -> { pedidos, total }
     sinCodigoTienda: 0,
     sinSalaAsignada: 0,
+    sinFechaPedido: 0,
     sinCoordenadas: 0,
     fueraDeTodosLosPoligonos: 0,
     sinTarifaConfigurada: 0,
@@ -180,7 +202,7 @@ function calcularPagos(filas, { festivos = [] } = {}) {
 
     if (!codigoTienda) { fila.motivo = 'SIN_CODIGO_TIENDA'; resumen.sinCodigoTienda++; detalle.push(fila); continue; }
     if (!sala) { fila.motivo = 'SIN_SALA_ASIGNADA'; resumen.sinSalaAsignada++; detalle.push(fila); continue; }
-    if (!fechaPedido) { fila.motivo = 'SIN_FECHA_PEDIDO'; detalle.push(fila); continue; }
+    if (!fechaPedido) { fila.motivo = 'SIN_FECHA_PEDIDO'; fila.valorFecha = String(row[COL.FECHA_PEDIDO] ?? ''); resumen.sinFechaPedido++; detalle.push(fila); continue; }
 
     fila.tipoDia = esFinDeSemanaOFestivo(fechaPedido, festivosSet) ? 'SDF' : 'LV';
     const bono = calcularBono(fechaPedido, row[COL.HORA_DESPACHO], row[COL.FECHA_ENTREGA], local);
@@ -344,7 +366,7 @@ function iniciarProcesoPago({ fechaInicio, fechaFin, festivos }) {
       // todavía tiene que calcular y guardar en Supabase: si se propagara ese
       // finalizado, la pantalla pediría el resultado antes de que exista
       // ("Resultado no disponible todavía"). Solo se marca finalizado al final.
-      const { filas, errores, diasSinPedidos } = await descargarPedidosPorRango(fechaInicio, fechaFin, (progreso) => {
+      const { filas, errores, diasSinPedidos, header } = await descargarPedidosPorRango(fechaInicio, fechaFin, (progreso) => {
         job.estado = { ...progreso, finalizado: false, errorFatal: null };
       });
       job.estado = { ...job.estado, diaLabel: 'Calculando y guardando...' };
@@ -357,7 +379,7 @@ function iniciarProcesoPago({ fechaInicio, fechaFin, festivos }) {
         guardado = { guardado: false, motivo: e.message };
       }
       if (!guardado.guardado) console.warn('[Estado de Pago] No quedó guardado en Supabase:', guardado.motivo);
-      job.resultado = { detalle, resumen, errores, diasSinPedidos, guardado };
+      job.resultado = { detalle, resumen, errores, diasSinPedidos, encabezados: header, guardado };
       job.estado = { ...job.estado, finalizado: true };
     } catch (e) {
       job.estado = { ...job.estado, finalizado: true, errorFatal: e.message };
