@@ -702,10 +702,30 @@ function addObservacion(assignmentId, texto) {
   return entry;
 }
 
+// Índices por assignmentId para no recorrer TODA la asistencia/bitácora por
+// cada turno del día (antes: O(turnos × historial) — se notaba al marcar
+// asistencia en tiendas con mucho historial acumulado en la temporada).
+function indiceAsistencia() {
+  const m = new Map();
+  for (const a of getAsistencias()) m.set(a.assignmentId, a);
+  return m;
+}
+function indiceObservaciones() {
+  const m = new Map();
+  for (const o of getObservaciones()) {
+    if (!m.has(o.assignmentId)) m.set(o.assignmentId, []);
+    m.get(o.assignmentId).push(o);
+  }
+  for (const lista of m.values()) lista.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  return m;
+}
+
 // Lista de asistencia de un día (y opcionalmente una tienda): solo turnos
 // ACTIVOS de esa fecha, con su estado de asistencia y su bitácora.
 function listAsistenciaDia({ storeId, date }) {
   if (!date) throw err('INVALID_DATE');
+  const asistenciaPorId = indiceAsistencia();
+  const observacionesPorId = indiceObservaciones();
   return getAsignaciones()
     .filter(a => a.status === 'ACTIVE')
     .map(a => {
@@ -713,7 +733,7 @@ function listAsistenciaDia({ storeId, date }) {
       if (!slot || slot.date !== date) return null;
       if (storeId && slot.storeId !== storeId) return null;
       const tienda = getTiendaById(slot.storeId);
-      const asistencia = getAsistenciaByAssignment(a.id);
+      const asistencia = asistenciaPorId.get(a.id) || null;
       return {
         assignmentId: a.id,
         karrierRut: a.karrierRut,
@@ -726,7 +746,7 @@ function listAsistenciaDia({ storeId, date }) {
         endTime: slot.endTime,
         asistio: asistencia ? asistencia.asistio : null,
         hora: asistencia ? (asistencia.hora || null) : null,
-        observaciones: observacionesDeAsignacion(a.id),
+        observaciones: observacionesPorId.get(a.id) || [],
       };
     })
     .filter(Boolean)
@@ -739,6 +759,8 @@ function listAsistenciaDia({ storeId, date }) {
 // turnos que tengan alguna observación, para que la asistencia y la hora
 // queden siempre reflejadas en el archivo.
 function listBitacora({ storeId, dateFrom, dateTo } = {}) {
+  const asistenciaPorId = indiceAsistencia();
+  const observacionesPorId = indiceObservaciones();
   return getAsignaciones()
     .filter(a => a.status === 'ACTIVE')
     .map(a => {
@@ -748,8 +770,8 @@ function listBitacora({ storeId, dateFrom, dateTo } = {}) {
       if (dateFrom && slot.date < dateFrom) return null;
       if (dateTo && slot.date > dateTo) return null;
       const tienda = getTiendaById(slot.storeId);
-      const asistencia = getAsistenciaByAssignment(a.id);
-      const observaciones = observacionesDeAsignacion(a.id);
+      const asistencia = asistenciaPorId.get(a.id) || null;
+      const observaciones = observacionesPorId.get(a.id) || [];
       return {
         assignmentId: a.id,
         karrierName: a.karrierName,

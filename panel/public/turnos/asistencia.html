@@ -146,7 +146,7 @@ function render() {
       <td>${f.storeName}</td>
       <td>${TURNO_LABEL[f.shiftType]}<br><span style="font-size:11px;color:var(--text-muted);">${f.startTime}-${f.endTime}</span></td>
       <td>
-        <div class="asist-toggle">
+        <div class="asist-toggle" id="asist-${f.assignmentId}">
           <button class="asist-btn si ${f.asistio === true ? 'active' : ''}" onclick='marcarAsistencia(${JSON.stringify(f.assignmentId)}, true)'>Sí</button>
           <button class="asist-btn no ${f.asistio === false ? 'active' : ''}" onclick='marcarAsistencia(${JSON.stringify(f.assignmentId)}, false)'>No</button>
         </div>
@@ -173,14 +173,36 @@ function render() {
   if (window.lucide) lucide.createIcons();
 }
 
+function pintarAsistencia(assignmentId, valor) {
+  const cont = document.getElementById(`asist-${assignmentId}`);
+  if (!cont) return;
+  const [btnSi, btnNo] = cont.querySelectorAll('.asist-btn');
+  btnSi.classList.toggle('active', valor === true);
+  btnNo.classList.toggle('active', valor === false);
+}
+
 async function marcarAsistencia(assignmentId, asistio) {
   const fila = filas.find(f => f.assignmentId === assignmentId);
-  const nuevoValor = fila && fila.asistio === asistio ? null : asistio; // clic de nuevo = desmarcar
+  const anterior = fila ? fila.asistio : null;
+  const nuevoValor = anterior === asistio ? null : asistio; // clic de nuevo = desmarcar
+  // Se pinta al toque; si falla el guardado, se revierte. Así no hay que
+  // esperar el viaje de ida y vuelta al servidor para ver el color.
+  if (fila) fila.asistio = nuevoValor;
+  pintarAsistencia(assignmentId, nuevoValor);
   const r = await fetch(`/api/turnos/admin/asistencia/${assignmentId}`, {
     method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ asistio: nuevoValor }),
-  }).then(x => x.json());
-  if (!r.ok) { alert(r.error || 'No se pudo guardar'); return; }
-  cargar();
+  }).then(x => x.json()).catch(e => ({ ok: false, error: e.message }));
+  if (!r.ok) {
+    if (fila) fila.asistio = anterior;
+    pintarAsistencia(assignmentId, anterior);
+    alert(r.error || 'No se pudo guardar');
+    return;
+  }
+  if (fila && r.asistencia) {
+    fila.hora = r.asistencia.hora || null;
+    const inputHora = document.querySelector(`.hora-input[onchange*="${assignmentId}"]`);
+    if (inputHora) inputHora.value = fila.hora || '';
+  }
 }
 
 async function guardarHora(assignmentId, hora) {
