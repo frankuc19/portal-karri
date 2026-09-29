@@ -66,6 +66,15 @@ function parseFechaHora(raw) {
   return { texto: `${p2(d)}/${p2(mo)}/${y}`, iso: `${y}-${p2(mo)}-${p2(d)}`, hora: h };
 }
 
+
+// Todas las llamadas a Geosort/SimpliRoute pasan por aquí: si el servicio no
+// responde en 25s se corta, en vez de dejar la petición del panel colgada.
+function fetchConTimeout(url, opts = {}, ms = 25000) {
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), ms);
+  return fetch(url, { ...opts, signal: ctrl.signal }).finally(() => clearTimeout(t));
+}
+
 // ─── Geosort ────────────────────────────────────────────────────────────────
 function diasEntre(iniISO, finISO) {
   const dias = [];
@@ -80,7 +89,7 @@ const LOGIN_URL_GEOSORT = 'https://geosort.falabella.com/api/crud-service/v1/log
 // Inicia sesión en Geosort y devuelve { token, cookie } frescos (misma llamada del
 // script de tokens). Las cookies se envían solo como nombre=valor, sin atributos.
 async function loginGeosort(usuario, clave) {
-  const resp = await fetch(LOGIN_URL_GEOSORT, {
+  const resp = await fetchConTimeout(LOGIN_URL_GEOSORT, {
     method: 'POST', headers: { 'Content-Type': 'application/json', 'x-country': 'CL' },
     body: JSON.stringify({ username: usuario, password: clave }),
   });
@@ -130,10 +139,10 @@ async function descargarGeosort(iniISO, finISO, accesos, onProgreso) {
     const dia = dias[i];
     if (onProgreso) onProgreso({ fase: 'Geosort', diaActual: i + 1, totalDias: dias.length, diaLabel: dia, filasAcumuladas: filas.length });
     const urlDia = `${BASE_URL_GEOSORT}?dateFrom=${dia}&dateUp=${dia}`;
-    let resp = await fetch(urlDia, { method: 'GET', headers: headers() });
+    let resp = await fetchConTimeout(urlDia, { method: 'GET', headers: headers() });
     if ((resp.status === 401 || resp.status === 403) && puedeLogin) {
       // El token venció a mitad del período: se renueva y se reintenta una vez.
-      try { sesion = await loginGeosort(cred.usuario, cred.clave); resp = await fetch(urlDia, { method: 'GET', headers: headers() }); } catch (e) { /* cae al manejo de error de abajo */ }
+      try { sesion = await loginGeosort(cred.usuario, cred.clave); resp = await fetchConTimeout(urlDia, { method: 'GET', headers: headers() }); } catch (e) { /* cae al manejo de error de abajo */ }
     }
     if (resp.status === 200) {
       const texto = await resp.text();
@@ -267,7 +276,7 @@ function resumirGeosort(header, filas, agp) {
 // ─── SimpliRoute ────────────────────────────────────────────────────────────
 async function loginSimpli(usuario, clave) {
   if (!usuario || !clave) throw new Error('Faltan el usuario o la clave de SimpliRoute en la pestaña "Accesos" (B1 y B2).');
-  const resp = await fetch(LOGIN_URL_SIMPLI, {
+  const resp = await fetchConTimeout(LOGIN_URL_SIMPLI, {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: usuario, password: clave }),
   });
   if (resp.status !== 200) throw new Error('SimpliRoute rechazó el usuario/clave de la pestaña "Accesos" (HTTP ' + resp.status + ').');
@@ -291,8 +300,8 @@ async function descargarSimpli(iniISO, finISO, accesos, onProgreso) {
   let token = await loginSimpli(accesos.simpliUsuario, accesos.simpliClave);
   const headers = () => ({ authorization: 'Token ' + token, accept: 'application/json' });
   const pedir = async (url) => {
-    let resp = await fetch(url, { headers: headers() });
-    if (resp.status === 401) { token = await loginSimpli(accesos.simpliUsuario, accesos.simpliClave); resp = await fetch(url, { headers: headers() }); }
+    let resp = await fetchConTimeout(url, { headers: headers() });
+    if (resp.status === 401) { token = await loginSimpli(accesos.simpliUsuario, accesos.simpliClave); resp = await fetchConTimeout(url, { headers: headers() }); }
     return resp;
   };
 

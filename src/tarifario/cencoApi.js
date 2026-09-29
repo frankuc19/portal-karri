@@ -2,6 +2,15 @@ const { google } = require('googleapis');
 const XLSX = require('xlsx');
 const path = require('path');
 
+
+// Si Cencosud/Cognito no responden en 25s se corta, en vez de dejar el
+// cálculo de Estado de Pago colgado indefinidamente.
+function fetchConTimeout(url, opts = {}, ms = 25000) {
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), ms);
+  return fetch(url, { ...opts, signal: ctrl.signal }).finally(() => clearTimeout(t));
+}
+
 // ─── Token de Cencosud ──────────────────────────────────────────────────────
 // Un flujo de n8n (Schedule Trigger, corre solo ~2 veces al día) inicia
 // sesión en el portal de Cencosud vía Browserless y guarda el access_token +
@@ -40,7 +49,7 @@ function getAuth() {
 async function obtenerNombreHoja(sheetId, gid) {
   const sheets = google.sheets({ version: 'v4', auth: getAuth() });
   let res;
-  try { res = await sheets.spreadsheets.get({ spreadsheetId: sheetId }); }
+  try { res = await sheets.spreadsheets.get({ spreadsheetId: sheetId }, { timeout: 20000 }); }
   catch (e) {
     if (e.code === 404 || e.message?.includes('not found')) throw new Error(`Sheet de Tokens no encontrado (${sheetId}).`);
     if (e.code === 403) throw new Error(`Sin permiso para leer el Sheet de Tokens ("EDP Karri Chile"). Comparte la planilla con la Service Account (la misma que usa Altas OB / Devoluciones) como Lector.`);
@@ -56,7 +65,7 @@ async function obtenerNombreHoja(sheetId, gid) {
 async function leerTokenCenco() {
   const tabName = await obtenerNombreHoja(TOKENS_SHEET_ID, TOKENS_SHEET_GID);
   const sheets = google.sheets({ version: 'v4', auth: getAuth() });
-  const res = await sheets.spreadsheets.values.get({ spreadsheetId: TOKENS_SHEET_ID, range: `${tabName}!A:D` });
+  const res = await sheets.spreadsheets.values.get({ spreadsheetId: TOKENS_SHEET_ID, range: `${tabName}!A:D` }, { timeout: 20000 });
   const rows = res.data.values || [];
   if (rows.length < 2) throw new Error('La pestaña Tokens está vacía.');
 
@@ -84,7 +93,7 @@ async function leerTokenCenco() {
 // mantiene al día el flujo de n8n en su propio horario.
 async function renovarTokenCognito(refreshToken) {
   if (!refreshToken) return null;
-  const resp = await fetch('https://cognito-idp.us-east-1.amazonaws.com/', {
+  const resp = await fetchConTimeout('https://cognito-idp.us-east-1.amazonaws.com/', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/x-amz-json-1.1',
@@ -132,13 +141,13 @@ async function llamarAPICencoCsv(startMillis, endMillis, tokens) {
     }),
   });
 
-  let resp = await fetch(DOWNLOAD_URL_CENCO, buildOptions(tokens.accessToken));
+  let resp = await fetchConTimeout(DOWNLOAD_URL_CENCO, buildOptions(tokens.accessToken));
 
   if ((resp.status === 401 || resp.status === 502) && tokens.refreshToken) {
     const nuevoToken = await renovarTokenCognito(tokens.refreshToken);
     if (nuevoToken) {
       tokens.accessToken = nuevoToken;
-      resp = await fetch(DOWNLOAD_URL_CENCO, buildOptions(nuevoToken));
+      resp = await fetchConTimeout(DOWNLOAD_URL_CENCO, buildOptions(nuevoToken));
     }
   }
 

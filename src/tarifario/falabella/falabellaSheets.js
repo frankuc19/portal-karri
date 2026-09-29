@@ -24,9 +24,10 @@ async function leerPestana(nombre, rango) {
       range: `'${nombre}'!${rango}`,
       valueRenderOption: 'UNFORMATTED_VALUE',
       dateTimeRenderOption: 'SERIAL_NUMBER',
-    });
+    }, { timeout: 20000 }); // si Sheets no responde en 20s, se corta (antes se podía colgar minutos)
     return res.data.values || [];
   } catch (e) {
+    if (e.code === 'ETIMEDOUT' || /timeout/i.test(e.message || '')) throw new Error(`"${nombre}" de "EDP Karri Chile" no respondió a tiempo (20s). Reintenta.`);
     if (e.code === 403) throw new Error(`Sin permiso para leer la planilla "EDP Karri Chile". Compártela con la cuenta de servicio como Lector.`);
     if (e.code === 400 || /Unable to parse range/i.test(e.message || '')) throw new Error(`No existe la pestaña "${nombre}" en "EDP Karri Chile" (o tiene otro nombre).`);
     throw e;
@@ -40,7 +41,18 @@ async function leerTarifarioCrudo() {
 }
 
 // Placa normalizada (sin guiones/espacios/puntos, mayúsculas) → tipo de vehículo.
-async function leerMapaAGP() {
+const CACHE_MS = 5 * 60 * 1000;
+const _cache = new Map(); // clave → { valor, hasta }
+async function conCache(clave, fn) {
+  const c = _cache.get(clave);
+  if (c && c.hasta > Date.now()) return c.valor;
+  const valor = await fn();
+  _cache.set(clave, { valor, hasta: Date.now() + CACHE_MS });
+  return valor;
+}
+
+async function leerMapaAGP() { return conCache('agp', _leerMapaAGP); }
+async function _leerMapaAGP() {
   const mapa = new Map();
   const filas = await leerPestana('AGP', 'A:B');
   if (filas.length < 2) return mapa;
@@ -58,7 +70,8 @@ async function leerMapaAGP() {
 }
 
 // Set de fechas 'yyyy-mm-dd'. Si la pestaña no existe, el recargo aplica solo a domingos.
-async function leerFeriados() {
+async function leerFeriados() { return conCache('feriados', _leerFeriados); }
+async function _leerFeriados() {
   const set = new Set();
   let filas;
   try { filas = await leerPestana('Feriados CL', 'A:A'); } catch (e) { return { set, aviso: e.message }; }
