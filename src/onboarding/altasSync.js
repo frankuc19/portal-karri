@@ -18,8 +18,17 @@ function esAlta(estado) {
  * Lo que sí es una alerta real es que el mismo RUT aparezca MÁS DE UNA VEZ
  * dentro de la propia hoja en esta misma lectura ("duplicadosEnHoja"), lo
  * que indica un problema de datos que operaciones debería revisar ahí.
+ *
+ * `desdeCero: true` vacía la tabla de Altas Onboarding ANTES de volver a
+ * crear todo desde la hoja — así cada persona que siga en la hoja con
+ * Estatus "Alta" queda con sus datos tal cual están hoy ahí, en vez de
+ * arrastrar valores viejos que el sync normal nunca pisa (es solo-aditivo).
+ * Esto también borra cualquier edición manual hecha en el panel, porque la
+ * hoja fuente no guarda esos campos y no hay de dónde recuperarlos — se
+ * vacía recién después de poder leer la hoja, para no dejar la tabla vacía
+ * si la lectura falla.
  */
-async function sincronizarAltasOB() {
+async function sincronizarAltasOB({ desdeCero = false } = {}) {
   let filas;
   try {
     filas = await leerAltasOB();
@@ -34,6 +43,8 @@ async function sincronizarAltasOB() {
     console.error('[Altas OB] Error al leer la planilla:', e.message);
     return resultado;
   }
+
+  if (desdeCero) store.resetAltas();
 
   const altas = filas.filter(f => esAlta(f.estado));
 
@@ -85,6 +96,7 @@ async function sincronizarAltasOB() {
     id: crypto.randomUUID(),
     ejecutadoAt: new Date().toISOString(),
     ok: true,
+    desdeCero,
     totalFilasLeidas: filas.length,
     altas: altas.length,
     creados,
@@ -95,7 +107,7 @@ async function sincronizarAltasOB() {
     estadosEncontrados: [...new Set(filas.map(f => f.estado).filter(Boolean))].slice(0, 20),
   };
   store.addSyncLog(resultado);
-  console.log(`[Altas OB] Sincronización: ${creados} nuevo(s), ${yaExistian} ya existían, ${duplicadosEnHoja.length} RUT repetido(s) dentro de la hoja (de ${altas.length} con estatus "Alta" / ${filas.length} filas leídas)`);
+  console.log(`[Altas OB] Sincronización${desdeCero ? ' (desde 0)' : ''}: ${creados} nuevo(s), ${yaExistian} ya existían, ${duplicadosEnHoja.length} RUT repetido(s) dentro de la hoja (de ${altas.length} con estatus "Alta" / ${filas.length} filas leídas)`);
   return resultado;
 }
 

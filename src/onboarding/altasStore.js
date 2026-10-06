@@ -50,6 +50,14 @@ function deleteAlta(id) {
   writeJson(ALTAS_FILE, getAltas().filter(a => a.id !== id));
 }
 
+// Vacía la tabla de Altas Onboarding por completo — usado solo por la
+// resincronización "desde 0" (ver altasSync.sincronizarAltasOB). Borra
+// también cualquier edición manual hecha en el panel (PUT), porque no
+// tiene de dónde recuperarlas: la hoja fuente no guarda esos campos.
+function resetAltas() {
+  writeJson(ALTAS_FILE, []);
+}
+
 // ─── Log de sincronizaciones (alertas de duplicados / errores) ────────────────
 function getSyncLog() { return readJson(SYNC_LOG_FILE, []); }
 function addSyncLog(entry) {
@@ -60,6 +68,6 @@ function addSyncLog(entry) {
 }
 
 module.exports = {
-  getAltas, getAltaById, getAltaByRutKey, saveAlta, deleteAlta,
+  getAltas, getAltaById, getAltaByRutKey, saveAlta, deleteAlta, resetAltas,
   getSyncLog, addSyncLog,
 };

@@ -13,8 +13,15 @@ router.get('/sync-log', (_req, res) => {
   res.json({ ok: true, log: store.getSyncLog() });
 });
 
-router.post('/sync', async (_req, res) => {
-  const resultado = await sincronizarAltasOB();
+router.post('/sync', async (req, res) => {
+  const desdeCero = req.body?.desdeCero === true;
+  // Reiniciar y resincronizar borra toda la tabla (incluidas las ediciones
+  // manuales hechas en el panel) antes de reconstruirla desde la hoja —
+  // mismo nivel de permiso que las demás acciones destructivas del panel.
+  if (desdeCero && req.session?.role === 'beginner') {
+    return res.status(403).json({ ok: false, error: 'Tu perfil no puede reiniciar la tabla de Altas.' });
+  }
+  const resultado = await sincronizarAltasOB({ desdeCero });
   res.json(resultado);
 });
 

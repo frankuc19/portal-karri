@@ -42,6 +42,9 @@
         <button id="btnSync" onclick="sincronizarAhora()" class="btn-secondary">
           <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i> Sincronizar ahora
         </button>
+        <button id="btnSyncDesdeCero" onclick="sincronizarDesdeCero()" class="btn-secondary" title="Borra toda la tabla y la reconstruye desde la hoja — también borra las ediciones manuales">
+          <i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i> Reiniciar y resincronizar
+        </button>
         <button onclick="exportarExcel()" class="btn-secondary">
           <i data-lucide="file-spreadsheet" class="w-3.5 h-3.5"></i> Exportar Excel
         </button>
@@ -408,6 +411,28 @@ async function sincronizarAhora() {
   btn.innerHTML = '<i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i> Sincronizar ahora';
   lucide.createIcons();
   if (!r.ok) { alert('Error al sincronizar: ' + r.error); }
+  await cargarAltas();
+}
+
+async function sincronizarDesdeCero() {
+  const ok = confirm(
+    'Esto borra TODA la tabla de Altas Onboarding y la reconstruye desde "Consolidado Altas OB".\n\n' +
+    'Se pierde cualquier edición manual hecha acá en el panel (nombre, celular, sala, etc.) — ' +
+    'queda tal como está hoy en la hoja. Esta acción no se puede deshacer.\n\n' +
+    '¿Reiniciar y resincronizar?'
+  );
+  if (!ok) return;
+  const btn = document.getElementById('btnSyncDesdeCero');
+  btn.disabled = true;
+  btn.innerHTML = '<i data-lucide="loader-2" class="w-3.5 h-3.5" style="animation:spin 1s linear infinite;"></i> Reiniciando...';
+  const r = await fetch('/api/ob/altas/sync', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ desdeCero: true }),
+  }).then(x => x.json()).catch(e => ({ ok: false, error: e.message }));
+  btn.disabled = false;
+  btn.innerHTML = '<i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i> Reiniciar y resincronizar';
+  lucide.createIcons();
+  if (!r.ok) { alert('Error al reiniciar: ' + r.error); return; }
+  alert(`Listo: se recrearon ${r.creados} registro(s) desde la hoja.`);
   await cargarAltas();
 }
 
