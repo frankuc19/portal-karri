@@ -490,26 +490,46 @@ function reasignarTurno(assignmentId, newSlotId) {
   });
 }
 
+// Índice slotId -> asignaciones ACTIVAS de ese slot, armado una sola vez.
+// slotConInfo() lo usa para no recorrer TODA la historia de asignaciones
+// (incluidas las canceladas y las de meses atrás) por cada slot y por cada
+// rol — sin esto, pintar la disponibilidad de una tienda (varias decenas de
+// slots × 3 roles) recorría miles de asignaciones una y otra vez, y se
+// ponía más lento a medida que se acumulaba historial (mismo problema que
+// ya se arregló en Asistencia).
+function indiceAsignacionesActivasPorSlot() {
+  const m = new Map();
+  for (const a of getAsignaciones()) {
+    if (a.status !== 'ACTIVE') continue;
+    if (!m.has(a.slotId)) m.set(a.slotId, []);
+    m.get(a.slotId).push(a);
+  }
+  return m;
+}
+
 // ─── Consultas agregadas ────────────────────────────────────────────────────────
 // Agrega el desglose por rol (porRol) y también totales agregados (capacity/
 // taken/available/coverage sumados entre los 3 roles) para no romper las
 // pantallas que solo necesitan el número global (Dashboard, Asignaciones...).
-function slotConInfo(slot) {
+// `indiceActivas`, si se pasa (ver indiceAsignacionesActivasPorSlot), evita
+// recalcularlo por cada slot cuando se llama en un .map() sobre varios.
+function slotConInfo(slot, indiceActivas) {
+  const activasDelSlot = indiceActivas ? (indiceActivas.get(slot.id) || []) : asignacionesActivasDeSlot(slot.id);
+
   // Capacitación no tiene cupos: siempre disponible, no participa en la
   // cobertura/planificación de AM/PM/FULL.
   if (slot.shiftType === 'CAPACITACION') {
-    const taken = asignacionesActivasDeSlot(slot.id).length;
     return {
       ...slot,
       capacity: null, capacityPorRol: null, porRol: null,
-      taken, available: null, coverage: null, sinCupo: true,
+      taken: activasDelSlot.length, available: null, coverage: null, sinCupo: true,
     };
   }
   const capacityPorRol = normalizarCapacidadRol(slot.capacity);
   const porRol = {};
   let taken = 0, capacityTotal = 0;
   for (const rol of ROLES) {
-    const tomadosRol = asignacionesActivasDeSlot(slot.id, rol).length;
+    const tomadosRol = activasDelSlot.filter(a => a.role === rol).length;
     const capRol = capacityPorRol[rol];
     porRol[rol] = { capacity: capRol, taken: tomadosRol, available: Math.max(0, capRol - tomadosRol) };
     taken += tomadosRol;
@@ -530,9 +550,10 @@ function slotConInfo(slot) {
 // extremos incluidos) — base para la vista por semana, por día específico
 // o por rango elegido a mano.
 function slotsEnRango(storeId, dateFrom, dateTo) {
+  const indiceActivas = indiceAsignacionesActivasPorSlot();
   return getSlots()
     .filter(s => s.storeId === storeId && s.date >= dateFrom && s.date <= dateTo)
-    .map(slotConInfo)
+    .map(s => slotConInfo(s, indiceActivas))
     .sort((a, b) => (a.date + a.shiftType).localeCompare(b.date + b.shiftType));
 }
 
@@ -550,9 +571,10 @@ function disponibilidadTienda(storeId, weekStartDate) {
 // completa (no solo la semana en curso).
 function disponibilidadTiendaCompleta(storeId) {
   const hoy = new Date().toISOString().slice(0, 10);
+  const indiceActivas = indiceAsignacionesActivasPorSlot();
   return getSlots()
     .filter(s => s.storeId === storeId && s.date >= hoy)
-    .map(slotConInfo)
+    .map(s => slotConInfo(s, indiceActivas))
     .sort((a, b) => (a.date + a.shiftType).localeCompare(b.date + b.shiftType));
 }
 
@@ -796,6 +818,7 @@ module.exports = {
   getTiendas, getTiendaById, saveTienda, deleteTienda,
   getKarriers, getKarrierByRut, saveKarrier, deleteKarrier, ensureKarrier,
   getSlots, getSlotById, saveSlot, deleteSlot, createSlot, generarSemana, generarRango,
+  indiceAsignacionesActivasPorSlot,
   getAsignaciones, getAsignacionById, listAsignaciones,
   tomarTurno, cancelarTurno, reasignarTurno,
   disponibilidadTienda, disponibilidadTiendaCompleta, misTurnos, coberturaTienda, coberturaGeneral, dashboardKpis,

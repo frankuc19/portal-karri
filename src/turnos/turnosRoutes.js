@@ -289,8 +289,9 @@ adminRouter.get('/slots/plantilla', (req, res) => {
   const tienda = store.getTiendaById(storeId);
   if (!tienda) return res.status(404).json({ ok: false, error: 'Tienda no encontrada' });
 
+  const indiceActivas = store.indiceAsignacionesActivasPorSlot();
   const existentes = new Map(
-    store.getSlots().filter(s => s.storeId === storeId).map(s => [`${s.date}|${s.shiftType}`, store.slotConInfo(s)])
+    store.getSlots().filter(s => s.storeId === storeId).map(s => [`${s.date}|${s.shiftType}`, store.slotConInfo(s, indiceActivas)])
   );
 
   const filas = [];
