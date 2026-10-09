@@ -247,16 +247,35 @@ function requireLmsAdmin(req, res, next) {
   res.status(401).json({ ok: false, error: 'No autorizado' });
 }
 
+// Caché en memoria por archivo para los endpoints LMS — todos son públicos
+// (el celular del conductor los golpea sin login, potencialmente miles de
+// conductores) y antes releían y re-parseaban el archivo COMPLETO en cada
+// GET, y además lo reescribían completo en cada POST. Con el progreso de
+// capacitación de toda la base de conductores (todos los módulos y quizzes
+// de cada uno) ese archivo crece sin límite, así que cada carga de página o
+// cada respuesta de quiz iba quedando más lenta — y al ser síncrono, mientras
+// lee/escribe bloquea el proceso para TODO el panel, no solo para ese
+// conductor. Mismo patrón de caché que ya usan turnosStore/altasStore/
+// cencoStore — writeJsonLms mantiene el caché al día, nunca queda obsoleto.
+const _lmsCache = new Map();
+function readJsonLms(file, fallback) {
+  if (_lmsCache.has(file)) return _lmsCache.get(file);
+  let data = fallback;
+  try { data = JSON.parse(fs.readFileSync(file, 'utf8')); } catch {}
+  _lmsCache.set(file, data);
+  return data;
+}
+function writeJsonLms(file, data) {
+  fs.mkdirSync(DATA_DIR, { recursive: true });
+  fs.writeFileSync(file, JSON.stringify(data));
+  _lmsCache.set(file, data);
+}
+
 const LMS_FILE = path.join(DATA_DIR, 'lms_conductores.json');
 const LMS_DEFAULT = { "12345678-9":"falabella","98765432-1":"mercadolibre","11111111-1":"tottus","22222222-2":"jumbo" };
 
-function readLmsCond() {
-  try { return JSON.parse(fs.readFileSync(LMS_FILE, 'utf8')); } catch { return LMS_DEFAULT; }
-}
-function writeLmsCond(data) {
-  fs.mkdirSync(DATA_DIR, { recursive: true });
-  fs.writeFileSync(LMS_FILE, JSON.stringify(data));
-}
+function readLmsCond() { return readJsonLms(LMS_FILE, LMS_DEFAULT); }
+function writeLmsCond(data) { writeJsonLms(LMS_FILE, data); }
 
 // Público: el celular del conductor lo consume para saber a qué convenio pertenece su RUT
 app.get('/api/lms/conductores', (req, res) => {
@@ -280,45 +299,36 @@ app.post('/api/lms/conductores', requireLmsAdmin, (req, res) => {
 // Contenido LMS: estructura de módulos + videos + preguntas
 const LMS_CONTENT_FILE = path.join(DATA_DIR, 'lms_contenido.json');
 app.get('/api/lms/contenido', (req, res) => {
-  try { res.json(JSON.parse(fs.readFileSync(LMS_CONTENT_FILE, 'utf8'))); }
-  catch { res.json({}); }
+  res.json(readJsonLms(LMS_CONTENT_FILE, {}));
 });
 app.post('/api/lms/contenido', requireLmsAdmin, (req, res) => {
-  fs.mkdirSync(DATA_DIR, { recursive: true });
-  fs.writeFileSync(LMS_CONTENT_FILE, JSON.stringify(req.body));
+  writeJsonLms(LMS_CONTENT_FILE, req.body);
   res.json({ ok: true });
 });
 
 // Progreso por conductor — público (el celular lee y escribe)
 const LMS_PROG_FILE = path.join(DATA_DIR, 'lms_progreso.json');
-function readLmsProg() {
-  try { return JSON.parse(fs.readFileSync(LMS_PROG_FILE, 'utf8')); } catch { return {}; }
-}
+function readLmsProg() { return readJsonLms(LMS_PROG_FILE, {}); }
 app.get('/api/lms/progreso', requireLmsAdmin, (req, res) => res.json(readLmsProg()));
 app.get('/api/lms/progreso/:rut', (req, res) => {
   res.json(readLmsProg()[req.params.rut] || {});
 });
 app.post('/api/lms/progreso/:rut', (req, res) => {
-  const prog = readLmsProg();
+  const prog = { ...readLmsProg() };
   prog[req.params.rut] = req.body;
-  fs.mkdirSync(DATA_DIR, { recursive: true });
-  fs.writeFileSync(LMS_PROG_FILE, JSON.stringify(prog));
+  writeJsonLms(LMS_PROG_FILE, prog);
   res.json({ ok: true });
 });
 
 // Logs de quizzes — público (conductor escribe desde su celular, admin lee)
 const LMS_LOGS_FILE = path.join(DATA_DIR, 'lms_logs.json');
-function readLmsLogs() {
-  try { return JSON.parse(fs.readFileSync(LMS_LOGS_FILE, 'utf8')); } catch { return []; }
-}
+function readLmsLogs() { return readJsonLms(LMS_LOGS_FILE, []); }
 app.get('/api/lms/logs', requireLmsAdmin, (req, res) => {
   res.json(readLmsLogs());
 });
 app.post('/api/lms/logs', (req, res) => {
-  const logs = readLmsLogs();
-  logs.unshift(req.body);
-  fs.mkdirSync(DATA_DIR, { recursive: true });
-  fs.writeFileSync(LMS_LOGS_FILE, JSON.stringify(logs.slice(0, 2000)));
+  const logs = [req.body, ...readLmsLogs()].slice(0, 2000);
+  writeJsonLms(LMS_LOGS_FILE, logs);
   res.json({ ok: true });
 });
 

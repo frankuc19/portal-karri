@@ -9,16 +9,26 @@ function ensureDir() {
   if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
 }
 
+// Caché en memoria — cada campaña guarda su lista de contactos completa (el
+// Excel subido, fila por fila), así que el archivo crece con cada envío.
+// Sin caché, listar campañas o consultar una sola releía y re-parseaba TODO
+// el archivo en cada request (mismo patrón ya corregido en turnosStore/
+// altasStore/LMS). writeDb mantiene el caché al día.
+let _dbCache = null;
 function readDb() {
+  if (_dbCache) return _dbCache;
   ensureDir();
-  if (!fs.existsSync(DB_FILE)) return { campaigns: [] };
-  try { return JSON.parse(fs.readFileSync(DB_FILE, 'utf8')); }
-  catch { return { campaigns: [] }; }
+  _dbCache = { campaigns: [] };
+  if (fs.existsSync(DB_FILE)) {
+    try { _dbCache = JSON.parse(fs.readFileSync(DB_FILE, 'utf8')); } catch {}
+  }
+  return _dbCache;
 }
 
 function writeDb(data) {
   ensureDir();
   fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2));
+  _dbCache = data;
 }
 
 function getCampaigns() { return readDb().campaigns; }
