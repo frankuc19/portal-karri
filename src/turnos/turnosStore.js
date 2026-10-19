@@ -30,6 +30,11 @@ const HORARIOS_POR_CADENA = [
     PM:   { startTime: '15:00', endTime: '22:00' },
     FULL: { startTime: '09:00', endTime: '22:00' },
   } },
+  // Jumbo capacita de 12:00 a 13:00 (siempre fue a esa hora); sin esto caía en
+  // el 10:30 por defecto, que es el de Walmart.
+  { match: ['jumbo'], horarios: {
+    CAPACITACION: { startTime: '12:00', endTime: '13:00' },
+  } },
 ];
 function horarioDeTurno(shiftType, nombreTienda) {
   const n = String(nombreTienda || '').toLowerCase();
@@ -261,6 +266,7 @@ function ensureKarrier(rut, name, phone) {
 function getSlots() {
   const tiendas = new Map(getTiendas().map(t => [t.id, t.name]));
   return readJson(SLOTS_FILE, []).map(s => {
+    if (s.horaFija) return s; // hora elegida a mano al crear la Capacitación — no se deriva
     const h = horarioDeTurno(s.shiftType, tiendas.get(s.storeId));
     return h ? { ...s, startTime: h.startTime, endTime: h.endTime } : s;
   });
@@ -278,16 +284,19 @@ function deleteSlot(id) {
   writeJson(ASIG_FILE, getAsignaciones().filter(a => a.slotId !== id));
 }
 
-function createSlot({ storeId, shiftType, date, capacity }) {
+function createSlot({ storeId, shiftType, date, capacity, startTime, endTime }) {
   const tipo = horarioDeTurno(shiftType, getTiendaById(storeId)?.name);
   if (!tipo) throw new Error('Tipo de turno inválido');
+  // Hora elegida a mano (solo Capacitación): se respeta y no se vuelve a derivar.
+  const horaFija = Boolean(startTime && endTime);
   const slot = {
     id: crypto.randomUUID(),
     storeId,
     shiftType,
     date, // YYYY-MM-DD
-    startTime: tipo.startTime,
-    endTime: tipo.endTime,
+    startTime: horaFija ? startTime : tipo.startTime,
+    endTime: horaFija ? endTime : tipo.endTime,
+    ...(horaFija ? { horaFija: true } : {}),
     capacity: normalizarCapacidadRol(capacity), // { Picker, Shopper, Driver }
     status: 'OPEN',
     createdAt: new Date().toISOString(),
@@ -812,7 +821,7 @@ function listBitacora({ storeId, dateFrom, dateTo } = {}) {
 }
 
 module.exports = {
-  SHIFT_TYPES, ROLES,
+  SHIFT_TYPES, ROLES, horarioDeTurno,
   normalizarRolPorCliente, determinarRolKarrier, cuposDisponibles,
   getSettings, saveSettings,
   getTiendas, getTiendaById, saveTienda, deleteTienda,

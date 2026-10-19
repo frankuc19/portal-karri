@@ -138,9 +138,11 @@
       <button class="btn-ghost" onclick="cerrarModalCapacitacion()"><i data-lucide="x" style="width:16px;height:16px;"></i></button>
     </div>
     <div class="modal-body">
-      <p style="font-size:11.5px;color:var(--text-muted);">Turnos de Capacitación sin límite de cupos — no suman ni afectan la cobertura de AM/PM/FULL. Aparecen en la toma de turnos y en Asistencia.</p>
-      <div style="display:flex;gap:8px;align-items:flex-end;">
-        <div class="form-group" style="flex:1;"><p class="label mb-1">Fecha</p><input type="date" class="input" id="f-cap-fecha"></div>
+      <p style="font-size:11.5px;color:var(--text-muted);">Turnos de Capacitación sin límite de cupos — no suman ni afectan la cobertura de AM/PM/FULL. Aparecen en la toma de turnos y en Asistencia. La hora se prellena según el banner de la tienda; puedes ajustarla.</p>
+      <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;">
+        <div class="form-group" style="flex:1;min-width:130px;"><p class="label mb-1">Fecha</p><input type="date" class="input" id="f-cap-fecha"></div>
+        <div class="form-group"><p class="label mb-1">Desde</p><input type="time" class="input" id="f-cap-inicio" style="width:108px;"></div>
+        <div class="form-group"><p class="label mb-1">Hasta</p><input type="time" class="input" id="f-cap-fin" style="width:108px;"></div>
         <button class="btn-primary" onclick="crearCapacitacion()"><i data-lucide="plus" style="width:13px;height:13px;"></i> Crear</button>
       </div>
       <p id="modal-cap-error" class="hidden" style="color:#dc2626;font-size:12px;"></p>
@@ -379,6 +381,8 @@ function abrirModalCapacitacion() {
   const storeId = document.getElementById('sel-tienda').value;
   if (!storeId) { alert('Selecciona una tienda primero'); return; }
   document.getElementById('f-cap-fecha').value = new Date().toISOString().slice(0, 10);
+  document.getElementById('f-cap-inicio').value = '';
+  document.getElementById('f-cap-fin').value = '';
   document.getElementById('modal-cap-error').classList.add('hidden');
   document.getElementById('modal-cap-bg').classList.remove('hidden');
   cargarCapacitacion();
@@ -390,6 +394,11 @@ async function cargarCapacitacion() {
   const storeId = document.getElementById('sel-tienda').value;
   const r = await fetch(`/api/turnos/admin/slots/capacitacion?storeId=${storeId}`).then(x => x.json());
   const cont = document.getElementById('lista-capacitacion');
+  // Prellena la hora con la del banner (solo si el usuario aún no la cambió).
+  const def = (r.ok && r.horarioDefault) || { startTime: '10:30', endTime: '11:30' };
+  const iIni = document.getElementById('f-cap-inicio'), iFin = document.getElementById('f-cap-fin');
+  if (!iIni.value) iIni.value = def.startTime;
+  if (!iFin.value) iFin.value = def.endTime;
   const slots = r.ok ? r.slots : [];
   if (slots.length === 0) {
     cont.innerHTML = '<p style="font-size:12px;color:var(--text-faint);">Sin turnos de Capacitación programados.</p>';
@@ -409,10 +418,13 @@ async function crearCapacitacion() {
   const err = document.getElementById('modal-cap-error');
   err.classList.add('hidden');
   if (!date) { err.textContent = 'Elige una fecha'; err.classList.remove('hidden'); return; }
+  const startTime = document.getElementById('f-cap-inicio').value;
+  const endTime = document.getElementById('f-cap-fin').value;
   const r = await fetch('/api/turnos/admin/slots/capacitacion', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ storeId, date }),
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ storeId, date, startTime, endTime }),
   }).then(x => x.json());
   if (!r.ok) { err.textContent = r.error || 'No se pudo crear'; err.classList.remove('hidden'); return; }
+  if (r.yaExistia) { err.textContent = 'Ya había una Capacitación ese día (se mantiene su hora).'; err.classList.remove('hidden'); }
   cargarCapacitacion();
 }
 

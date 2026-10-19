@@ -209,18 +209,22 @@ adminRouter.get('/slots', (req, res) => {
 adminRouter.get('/slots/capacitacion', (req, res) => {
   const { storeId } = req.query;
   if (!storeId) return res.status(400).json({ ok: false, error: 'Falta la tienda' });
+  const tienda = store.getTiendaById(storeId);
   const slots = store.disponibilidadTiendaCompleta(storeId).filter(s => s.shiftType === 'CAPACITACION');
-  res.json({ ok: true, slots });
+  // Hora por defecto según el banner de la tienda (Jumbo 12:00, Walmart 10:30…),
+  // para prellenar el formulario; el admin puede ajustarla.
+  const def = tienda ? store.horarioDeTurno('CAPACITACION', tienda.name) : null;
+  res.json({ ok: true, slots, horarioDefault: { startTime: def?.startTime || '10:30', endTime: def?.endTime || '11:30' } });
 });
 adminRouter.post('/slots/capacitacion', (req, res) => {
-  const { storeId, date } = req.body || {};
+  const { storeId, date, startTime, endTime } = req.body || {};
   if (!storeId || !date) return res.status(400).json({ ok: false, error: 'Faltan datos' });
   const tienda = store.getTiendaById(storeId);
   if (!tienda) return res.status(404).json({ ok: false, error: 'Tienda no encontrada' });
   const existente = store.getSlots().find(s => s.storeId === storeId && s.date === date && s.shiftType === 'CAPACITACION');
-  if (existente) return res.json({ ok: true, slot: store.slotConInfo(existente) });
+  if (existente) return res.json({ ok: true, slot: store.slotConInfo(existente), yaExistia: true });
   try {
-    const slot = store.createSlot({ storeId, shiftType: 'CAPACITACION', date, capacity: {} });
+    const slot = store.createSlot({ storeId, shiftType: 'CAPACITACION', date, capacity: {}, startTime, endTime });
     res.json({ ok: true, slot: store.slotConInfo(slot) });
   } catch (e) {
     res.status(400).json({ ok: false, error: e.message });
