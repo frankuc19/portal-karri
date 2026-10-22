@@ -13,6 +13,8 @@ const SETTINGS_FILE  = path.join(DATA_DIR, 'turnos_settings.json');
 const SEED_MARKER_FILE = path.join(DATA_DIR, 'turnos_seed_v1.json');
 const ASISTENCIA_FILE   = path.join(DATA_DIR, 'turnos_asistencia.json');
 const OBSERVACIONES_FILE = path.join(DATA_DIR, 'turnos_observaciones.json');
+const AUDITORIA_FILE    = path.join(DATA_DIR, 'turnos_auditoria.json');
+const AUDITORIA_MAX     = 5000; // registro acotado para no crecer sin límite
 
 const SHIFT_TYPES = {
   AM:   { code: 'AM',   name: 'Mañana',   startTime: '08:00', endTime: '14:00' },
@@ -462,7 +464,36 @@ function tomarTurno(slotId, rut) {
   return conBloqueo(async () => _validarYCrearAsignacion(slotId, rut));
 }
 
-function cancelarTurno(assignmentId, rut, { isAdmin = false, reason = '' } = {}) {
+// ─── Auditoría: quién canceló / reasignó cada turno ─────────────────────────
+// Registro propio (no la bitácora de observaciones), solo-aditivo y acotado.
+// Se escribe únicamente al cancelar o reasignar (acciones poco frecuentes) y
+// se lee solo cuando un admin abre el historial, así que no toca las rutas
+// calientes ni enlentece el panel. readJson/writeJson ya cachean en memoria.
+function getAuditoria() { return readJson(AUDITORIA_FILE, []); }
+function registrarAuditoria({ accion, actor, assignmentId, karrierRut, karrierName, detalle }) {
+  const list = getAuditoria();
+  list.unshift({
+    id: crypto.randomUUID(),
+    ts: new Date().toISOString(),
+    accion,                     // 'cancelar' | 'reasignar'
+    actor: actor || 'desconocido', // texto legible: quién lo hizo
+    assignmentId: assignmentId || null,
+    karrierRut: karrierRut || null,
+    karrierName: karrierName || null,
+    detalle: detalle || null,   // texto con tienda/fecha/turno u origen→destino
+  });
+  writeJson(AUDITORIA_FILE, list.slice(0, AUDITORIA_MAX));
+}
+
+// Describe un turno en texto corto para el registro de auditoría.
+function descripcionTurno(asignacion) {
+  const slot = getSlotById(asignacion.slotId);
+  if (!slot) return asignacion.karrierName || asignacion.karrierRut || '';
+  const tienda = getTiendaById(slot.storeId);
+  return `${tienda?.name || 'tienda ?'} · ${slot.date} · ${slot.shiftType}`;
+}
+
+function cancelarTurno(assignmentId, rut, { isAdmin = false, reason = '', actor = '' } = {}) {
   return conBloqueo(async () => {
     const asignacion = getAsignacionById(assignmentId);
     if (!asignacion) throw err('ASSIGNMENT_NOT_FOUND');
@@ -471,29 +502,46 @@ function cancelarTurno(assignmentId, rut, { isAdmin = false, reason = '' } = {})
     // su propio turno; operaciones (isAdmin) siempre puede, desde Asignaciones.
     if (!isAdmin && !getSettings().allowCancellation) throw err('CANCELLATION_DISABLED');
     if (asignacion.status === 'CANCELLED') throw err('ALREADY_CANCELLED');
+    const quien = actor || (isAdmin ? 'Operaciones' : 'El propio Karrier');
     asignacion.status = 'CANCELLED';
     asignacion.cancelledAt = new Date().toISOString();
     asignacion.cancellationReason = reason || null;
+    asignacion.canceladoPor = quien; // queda en la asignación para mostrarlo en la tabla
     saveAsignacion(asignacion);
+    registrarAuditoria({
+      accion: 'cancelar', actor: quien, assignmentId,
+      karrierRut: asignacion.karrierRut, karrierName: asignacion.karrierName,
+      detalle: descripcionTurno(asignacion) + (reason ? ` — ${reason}` : ''),
+    });
     return asignacion;
   });
 }
 
 // Mueve a un Karrier de su turno actual a otro turno (mismo u otro día/tienda),
 // validando las mismas reglas de negocio que tomarTurno. Uso administrativo.
-function reasignarTurno(assignmentId, newSlotId) {
+function reasignarTurno(assignmentId, newSlotId, { actor = '' } = {}) {
   return conBloqueo(async () => {
     const actual = getAsignacionById(assignmentId);
     if (!actual) throw err('ASSIGNMENT_NOT_FOUND');
     if (actual.status !== 'ACTIVE') throw err('ALREADY_CANCELLED');
     if (actual.slotId === newSlotId) return actual;
 
+    const origen = descripcionTurno(actual);
     const nueva = _validarYCrearAsignacion(newSlotId, actual.karrierRut, actual.id);
+    const quien = actor || 'Operaciones';
 
     actual.status = 'CANCELLED';
     actual.cancelledAt = new Date().toISOString();
     actual.cancellationReason = 'Reasignado por operaciones';
+    actual.canceladoPor = quien;
     saveAsignacion(actual);
+    nueva.reasignadoPor = quien;
+    saveAsignacion(nueva);
+    registrarAuditoria({
+      accion: 'reasignar', actor: quien, assignmentId,
+      karrierRut: actual.karrierRut, karrierName: actual.karrierName,
+      detalle: `${origen}  →  ${descripcionTurno(nueva)}`,
+    });
 
     return nueva;
   });
@@ -829,7 +877,7 @@ module.exports = {
   getSlots, getSlotById, saveSlot, deleteSlot, createSlot, generarSemana, generarRango,
   indiceAsignacionesActivasPorSlot,
   getAsignaciones, getAsignacionById, listAsignaciones,
-  tomarTurno, cancelarTurno, reasignarTurno,
+  tomarTurno, cancelarTurno, reasignarTurno, getAuditoria,
   disponibilidadTienda, disponibilidadTiendaCompleta, misTurnos, coberturaTienda, coberturaGeneral, dashboardKpis,
   slotConInfo,
   getAsistenciaByAssignment, setAsistencia, setAsistenciaHora,

@@ -139,7 +139,7 @@ publicRouter.post('/cancelar', async (req, res) => {
   const { assignmentId, rut } = req.body || {};
   if (!assignmentId || !rut) return res.status(400).json({ ok: false, error: 'Faltan datos' });
   try {
-    const asignacion = await store.cancelarTurno(assignmentId, rut.trim());
+    const asignacion = await store.cancelarTurno(assignmentId, rut.trim(), { actor: `El propio Karrier (${rut.trim()})` });
     res.json({ ok: true, asignacion });
   } catch (e) {
     res.status(400).json({ ok: false, error: e.message, code: e.code || 'ERROR' });
@@ -530,9 +530,16 @@ adminRouter.get('/asignaciones/export', (req, res) => {
   res.send(buffer);
 });
 
+// Texto legible de quién está haciendo la acción, tomado de la sesión del panel.
+function actorDeSesion(req) {
+  const s = req.session || {};
+  const nombre = s.name || s.username || 'usuario';
+  return s.username && s.username !== s.name ? `${nombre} (${s.username})` : nombre;
+}
+
 adminRouter.post('/asignaciones/:id/cancelar', async (req, res) => {
   try {
-    const asignacion = await store.cancelarTurno(req.params.id, null, { isAdmin: true, reason: req.body?.reason });
+    const asignacion = await store.cancelarTurno(req.params.id, null, { isAdmin: true, reason: req.body?.reason, actor: actorDeSesion(req) });
     res.json({ ok: true, asignacion });
   } catch (e) {
     res.status(400).json({ ok: false, error: e.message, code: e.code || 'ERROR' });
@@ -543,11 +550,17 @@ adminRouter.post('/asignaciones/:id/reasignar', async (req, res) => {
   const { newSlotId } = req.body || {};
   if (!newSlotId) return res.status(400).json({ ok: false, error: 'Falta el turno destino' });
   try {
-    const asignacion = await store.reasignarTurno(req.params.id, newSlotId);
+    const asignacion = await store.reasignarTurno(req.params.id, newSlotId, { actor: actorDeSesion(req) });
     res.json({ ok: true, asignacion });
   } catch (e) {
     res.status(400).json({ ok: false, error: e.message, code: e.code || 'ERROR' });
   }
+});
+
+// Historial de cancelaciones/reasignaciones: quién hizo qué y cuándo.
+adminRouter.get('/auditoria', (req, res) => {
+  const limit = Math.min(Number(req.query.limit) || 200, 1000);
+  res.json({ ok: true, auditoria: store.getAuditoria().slice(0, limit) });
 });
 
 // ─── Asistencia ───────────────────────────────────────────────────────────────

@@ -61,6 +61,7 @@
         <button class="btn-secondary" onclick="irHoy()">Hoy</button>
         <button class="week-btn" onclick="cambiarSemana(7)"><i data-lucide="chevron-right" style="width:14px;height:14px;"></i></button>
       </div>
+      <button class="btn-secondary" onclick="abrirAuditoria()" title="Quién canceló o reasignó turnos"><i data-lucide="history" style="width:13px;height:13px;"></i> Historial de cambios</button>
       <a class="btn-secondary" id="btn-descargar" href="#" target="_blank"><i data-lucide="download" style="width:13px;height:13px;"></i> Descargar</a>
     </div>
   </header>
@@ -102,6 +103,23 @@
     <div class="modal-footer">
       <button class="btn-secondary" onclick="cerrarModal()">Cancelar</button>
       <button class="btn-primary" onclick="confirmarReasignacion()"><i data-lucide="repeat" style="width:13px;height:13px;"></i> Reasignar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal historial de cambios (auditoría) -->
+<div class="modal-bg hidden" id="modal-audit-bg">
+  <div class="modal" style="max-width:640px;">
+    <div class="modal-header">
+      <p style="font-size:14px;font-weight:700;">Historial de cambios</p>
+      <button class="btn-ghost" onclick="cerrarAuditoria()"><i data-lucide="x" style="width:16px;height:16px;"></i></button>
+    </div>
+    <div class="modal-body" style="max-height:70vh;overflow-y:auto;">
+      <p style="font-size:11.5px;color:var(--text-muted);">Quién canceló o reasignó turnos, del más reciente al más antiguo.</p>
+      <div id="audit-lista" style="display:flex;flex-direction:column;gap:6px;"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-secondary" onclick="cerrarAuditoria()">Cerrar</button>
     </div>
   </div>
 </div>
@@ -199,7 +217,9 @@ function render() {
       <td>${a.tienda?.name || '—'}</td>
       <td>${fmtFecha(a.slot.date)}</td>
       <td>${TURNO_LABEL[a.slot.shiftType]} · ${a.slot.startTime}-${a.slot.endTime}</td>
-      <td>${a.status === 'ACTIVE' ? '<span class="badge badge-electric">Activo</span>' : '<span class="badge badge-muted">Cancelado</span>'}</td>
+      <td>${a.status === 'ACTIVE'
+        ? '<span class="badge badge-electric">Activo</span>'
+        : `<span class="badge badge-muted">Cancelado</span>${a.canceladoPor ? `<div style="font-size:10.5px;color:var(--text-muted);margin-top:3px;">por ${a.canceladoPor}</div>` : ''}`}</td>
       <td style="display:flex;gap:4px;">
         ${a.status === 'ACTIVE' ? `
           <button class="btn-ghost" onclick='abrirReasignar(${JSON.stringify(a)})' title="Reasignar"><i data-lucide="repeat" style="width:13px;height:13px;"></i></button>
@@ -209,6 +229,27 @@ function render() {
     </tr>`).join('');
   if (window.lucide) lucide.createIcons({ el: tbody });
 }
+
+const ACCION_LABEL = { cancelar: 'Canceló', reasignar: 'Reasignó' };
+async function abrirAuditoria() {
+  const cont = document.getElementById('audit-lista');
+  cont.innerHTML = '<p style="font-size:12px;color:var(--text-faint);">Cargando…</p>';
+  document.getElementById('modal-audit-bg').classList.remove('hidden');
+  lucide.createIcons();
+  const r = await fetch('/api/turnos/admin/auditoria').then(x => x.json()).catch(() => ({ ok: false }));
+  const items = r.ok ? r.auditoria : [];
+  if (!items.length) { cont.innerHTML = '<p style="font-size:12px;color:var(--text-faint);">Aún no hay cambios registrados.</p>'; return; }
+  cont.innerHTML = items.map(x => {
+    const f = new Date(x.ts).toLocaleString('es-CL', { day:'2-digit', month:'2-digit', year:'2-digit', hour:'2-digit', minute:'2-digit' });
+    return `<div style="border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:12px;">
+      <div><b>${esc(x.actor)}</b> · ${ACCION_LABEL[x.accion] || x.accion} el turno de <b>${esc(x.karrierName || x.karrierRut || '—')}</b></div>
+      ${x.detalle ? `<div style="color:var(--text-muted);margin-top:2px;">${esc(x.detalle)}</div>` : ''}
+      <div style="color:var(--text-faint);margin-top:2px;">${f}</div>
+    </div>`;
+  }).join('');
+}
+function cerrarAuditoria() { document.getElementById('modal-audit-bg').classList.add('hidden'); }
+function esc(s) { return String(s ?? '').replace(/[&<>"]/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c])); }
 
 async function cancelar(id) {
   if (!confirm('¿Cancelar este turno? El cupo queda libre para otro Karrier.')) return;
