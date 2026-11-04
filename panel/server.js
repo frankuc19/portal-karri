@@ -1,6 +1,7 @@
 require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
 
 const express    = require('express');
+const compression = require('compression');
 const http       = require('http');
 const { Server } = require('socket.io');
 const QRCode     = require('qrcode');
@@ -187,6 +188,11 @@ const server = http.createServer(app);
 const io     = new Server(server);
 app.set('io', io);
 
+// Comprime (gzip) las respuestas de texto — HTML, JS, CSS y JSON. Las páginas
+// pesan 50-75 KB y viajaban sin comprimir; con gzip bajan ~80%, así que la web
+// carga mucho más rápido para todos, en cualquier sección. Debe ir antes de las
+// rutas y de express.static para alcanzar todo.
+app.use(compression());
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 // Manejador de JSON malformado — evita que Express devuelva HTML en errores de parseo
@@ -412,7 +418,18 @@ app.use((req, res, next) => {
   next();
 });
 
-app.use(express.static(path.join(__dirname, 'public')));
+// Cachea los estáticos en el navegador. Antes se revalidaban en cada
+// navegación (un round-trip por archivo, por página). Ahora: el HTML se
+// revalida siempre (304 si no cambió, para que un deploy se vea al toque),
+// y los assets (JS/CSS/imágenes/fuentes) se guardan 10 min sin round-trip.
+app.use(express.static(path.join(__dirname, 'public'), {
+  etag: true,
+  lastModified: true,
+  maxAge: '10m',
+  setHeaders: (res, filePath) => {
+    if (filePath.endsWith('.html')) res.setHeader('Cache-Control', 'no-cache');
+  },
+}));
 
 // ─── API: sesión actual ───────────────────────────────────────────────────────
 app.get('/api/me', requireAuthApi, (req, res) => {
