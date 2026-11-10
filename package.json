@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node src/index.js",
     "preview": "node src/index.js --preview",
-    "panel": "node panel/server.js"
+    "panel": "node panel/server.js",
+    "build:css": "npx -y tailwindcss@3 -c tailwind.config.js -i panel/tailwind-input.css -o panel/public/assets/tailwind.css --minify"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.116.0",
