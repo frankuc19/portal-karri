@@ -1,5 +1,5 @@
 const { Router } = require('express');
-const XLSX = require('xlsx');
+const { construirXlsx } = require('../excelExport');
 const {
   iniciarProcesoPago, obtenerEstadoJob, obtenerResultadoJob,
   obtenerHistorialCorridas, obtenerCorridaGuardada, eliminarCorridaGuardada,
@@ -34,14 +34,12 @@ router.get('/estado/:jobId', (req, res) => {
   res.json({ ok: true, estado });
 });
 
-router.get('/resultado/:jobId', (req, res) => {
+router.get('/resultado/:jobId', async (req, res) => {
   const resultado = obtenerResultadoJob(req.params.jobId);
   if (!resultado) return res.status(404).json({ ok: false, error: 'Resultado no disponible todavía.' });
 
   if (req.query.formato === 'excel') {
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(filasParaExcel(resultado.detalle)), 'Estado de Pago');
-    const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+    const buf = await construirXlsx([{ name: 'Estado de Pago', rows: filasParaExcel(resultado.detalle) }]);
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', 'attachment; filename="estado_pago_cenco.xlsx"');
     return res.send(buf);
@@ -63,9 +61,7 @@ router.get('/historial/:corridaId', async (req, res) => {
   if (r.error) return res.status(r.error === 'SUPABASE_NO_CONFIGURADO' ? 503 : 404).json({ ok: false, error: r.error });
 
   if (req.query.formato === 'excel') {
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(filasParaExcel(r.detalle)), 'Estado de Pago');
-    const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+    const buf = await construirXlsx([{ name: 'Estado de Pago', rows: filasParaExcel(r.detalle) }]);
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', `attachment; filename="estado_pago_cenco_${r.corrida.fecha_inicio}_${r.corrida.fecha_fin}.xlsx"`);
     return res.send(buf);

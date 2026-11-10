@@ -1,5 +1,5 @@
 const { Router } = require('express');
-const XLSX = require('xlsx');
+const { construirXlsx } = require('../../excelExport');
 const P = require('./falabellaPago');
 const { obtenerHistorialCorridas, eliminarCorridaGuardada } = require('../cencoPago');
 
@@ -16,14 +16,13 @@ function excelDe(detalle) {
     Vehículo: f.tipoVeh ?? f.vehiculo, 'Tarifa Base': f.tarifaBase ?? f.tarifa_base, 'Tarifa Variable': f.tarifaVariable ?? f.tarifa_variable,
     'Pago Estimado': f.pago, Servicio: f.servicio, Observación: f.observacion, Estado: f.estadoFila ?? f.estado_fila,
   }));
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(filas), 'Pago Falabella');
-  return XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+  return construirXlsx([{ name: 'Pago Falabella', rows: filas }]);
 }
-function enviarExcel(res, detalle, nombre) {
+async function enviarExcel(res, detalle, nombre) {
+  const buffer = await excelDe(detalle);
   res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
   res.setHeader('Content-Disposition', `attachment; filename="${nombre}"`);
-  res.send(excelDe(detalle));
+  res.send(buffer);
 }
 
 router.post('/procesar', (req, res) => {
@@ -39,7 +38,7 @@ router.get('/estado/:jobId', (req, res) => {
   res.json({ ok: true, estado });
 });
 
-router.get('/resultado/:jobId', (req, res) => {
+router.get('/resultado/:jobId', async (req, res) => {
   const r = P.obtenerResultadoJob(req.params.jobId);
   if (!r) return res.status(404).json({ ok: false, error: 'Resultado no disponible todavía.' });
   if (req.query.formato === 'excel') return enviarExcel(res, r.detalle, 'estado_pago_falabella.xlsx');

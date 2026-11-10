@@ -3,6 +3,7 @@ const XLSX = require('xlsx');
 const multer = require('multer');
 const store = require('./turnosStore');
 const altasStore = require('../onboarding/altasStore');
+const { construirXlsx } = require('../excelExport');
 
 const uploadCupos = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
 
@@ -243,7 +244,7 @@ adminRouter.post('/slots', (req, res) => {
 const TURNO_LABEL_XLSX = { AM: 'Mañana (AM)', PM: 'Tarde (PM)', FULL: 'Jornada completa', CAPACITACION: 'Capacitación' };
 const DIA_LABEL_XLSX = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
 
-adminRouter.get('/slots/export', (req, res) => {
+adminRouter.get('/slots/export', async (req, res) => {
   const { storeId, weekStart } = req.query;
   if (!storeId || !weekStart) return res.status(400).json({ ok: false, error: 'Faltan parámetros' });
   const tienda = store.getTiendaById(storeId);
@@ -271,12 +272,12 @@ adminRouter.get('/slots/export', (req, res) => {
     return fila;
   });
 
-  const wb = XLSX.utils.book_new();
-  const ws = XLSX.utils.json_to_sheet(filas);
   const headers = filas.length ? Object.keys(filas[0]) : [];
-  ws['!cols'] = headers.map(h => ({ wch: Math.max(10, h.length + 2) }));
-  XLSX.utils.book_append_sheet(wb, ws, 'Planificación');
-  const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+  const buffer = await construirXlsx([{
+    name: 'Planificación',
+    rows: filas,
+    cols: headers.map(h => ({ wch: Math.max(10, h.length + 2) })),
+  }]);
 
   const filename = `planificacion_${tienda.code || tienda.name}_${weekStart}.xlsx`.replace(/[^\w.\-]+/g, '_');
   res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
@@ -287,7 +288,7 @@ adminRouter.get('/slots/export', (req, res) => {
 // Plantilla Excel prellenada con los turnos del rango pedido (o los cupos
 // por defecto de la tienda si esa fecha/turno todavía no existe) — para
 // editar los cupos por rol y volver a subirla en /slots/importar.
-adminRouter.get('/slots/plantilla', (req, res) => {
+adminRouter.get('/slots/plantilla', async (req, res) => {
   const { storeId, dateFrom, dateTo } = req.query;
   if (!storeId || !dateFrom || !dateTo) return res.status(400).json({ ok: false, error: 'Faltan parámetros' });
   const tienda = store.getTiendaById(storeId);
@@ -319,25 +320,27 @@ adminRouter.get('/slots/plantilla', (req, res) => {
     }
   }
 
-  const wb = XLSX.utils.book_new();
-  const ws = XLSX.utils.json_to_sheet(filas);
-  ws['!cols'] = [{ wch: 12 }, { wch: 12 }, { wch: 8 }, { wch: 13 }, { wch: 13 }, { wch: 13 }];
-  XLSX.utils.book_append_sheet(wb, ws, 'Cupos');
-
-  const wsInfo = XLSX.utils.aoa_to_sheet([
-    [`Plantilla de cupos — ${tienda.name}`],
-    [''],
-    ['1. No cambies las columnas Fecha ni Turno.'],
-    ['2. Edita solo Cupos Picker / Cupos Shopper / Cupos Driver.'],
-    ['3. Formato de Fecha: AAAA-MM-DD (ej: 2026-09-10).'],
-    ['4. Turno debe ser exactamente: AM, PM o FULL.'],
-    ['5. Si agregas una fila con Fecha/Turno que no existe todavía, se crea automáticamente al subirla.'],
-    ['6. Vuelve a subir este mismo archivo (ya editado) con el botón "Cargar cupos (Excel)" en Planificación.'],
+  const buffer = await construirXlsx([
+    {
+      name: 'Cupos',
+      rows: filas,
+      cols: [{ wch: 12 }, { wch: 12 }, { wch: 8 }, { wch: 13 }, { wch: 13 }, { wch: 13 }],
+    },
+    {
+      name: 'Instrucciones',
+      aoa: [
+        [`Plantilla de cupos — ${tienda.name}`],
+        [''],
+        ['1. No cambies las columnas Fecha ni Turno.'],
+        ['2. Edita solo Cupos Picker / Cupos Shopper / Cupos Driver.'],
+        ['3. Formato de Fecha: AAAA-MM-DD (ej: 2026-09-10).'],
+        ['4. Turno debe ser exactamente: AM, PM o FULL.'],
+        ['5. Si agregas una fila con Fecha/Turno que no existe todavía, se crea automáticamente al subirla.'],
+        ['6. Vuelve a subir este mismo archivo (ya editado) con el botón "Cargar cupos (Excel)" en Planificación.'],
+      ],
+      cols: [{ wch: 90 }],
+    },
   ]);
-  wsInfo['!cols'] = [{ wch: 90 }];
-  XLSX.utils.book_append_sheet(wb, wsInfo, 'Instrucciones');
-
-  const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
   const filename = `plantilla_cupos_${tienda.code || tienda.name}.xlsx`.replace(/[^\w.\-]+/g, '_');
   res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
   res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
@@ -500,7 +503,7 @@ adminRouter.get('/asignaciones', (req, res) => {
   res.json({ ok: true, asignaciones: store.listAsignaciones({ storeId: storeId || null, weekStartDate: weekStart || null, status: status || null, role: role || null, date: date || null, shiftType: shiftType || null }) });
 });
 
-adminRouter.get('/asignaciones/export', (req, res) => {
+adminRouter.get('/asignaciones/export', async (req, res) => {
   const { storeId, weekStart, status, role, date, shiftType } = req.query;
   const asignaciones = store.listAsignaciones({ storeId: storeId || null, weekStartDate: weekStart || null, status: status || null, role: role || null, date: date || null, shiftType: shiftType || null });
 
@@ -517,12 +520,12 @@ adminRouter.get('/asignaciones/export', (req, res) => {
     'Registrado el': new Date(a.createdAt).toLocaleString('es-CL'),
   }));
 
-  const wb = XLSX.utils.book_new();
-  const ws = XLSX.utils.json_to_sheet(filas);
   const headers = filas.length ? Object.keys(filas[0]) : [];
-  ws['!cols'] = headers.map(h => ({ wch: Math.max(12, h.length + 2) }));
-  XLSX.utils.book_append_sheet(wb, ws, 'Asignaciones');
-  const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+  const buffer = await construirXlsx([{
+    name: 'Asignaciones',
+    rows: filas,
+    cols: headers.map(h => ({ wch: Math.max(12, h.length + 2) })),
+  }]);
 
   const filename = `asignaciones_${date || weekStart || 'todas'}.xlsx`.replace(/[^\w.\-]+/g, '_');
   res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
@@ -605,7 +608,7 @@ adminRouter.post('/observaciones', (req, res) => {
   }
 });
 
-adminRouter.get('/bitacora/export', (req, res) => {
+adminRouter.get('/bitacora/export', async (req, res) => {
   const { storeId, dateFrom, dateTo } = req.query;
   const tienda = storeId ? store.getTiendaById(storeId) : null;
 
@@ -622,14 +625,14 @@ adminRouter.get('/bitacora/export', (req, res) => {
       'Registrado el': new Date(o.createdAt).toLocaleString('es-CL'),
     }));
 
-  const wb = XLSX.utils.book_new();
-  const ws = XLSX.utils.json_to_sheet(filas);
-  ws['!cols'] = [
-    { wch: 12 }, { wch: 8 }, { wch: 18 }, { wch: 20 }, { wch: 13 },
-    { wch: 11 }, { wch: 8 }, { wch: 40 }, { wch: 18 },
-  ];
-  XLSX.utils.book_append_sheet(wb, ws, 'Bitácora');
-  const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+  const buffer = await construirXlsx([{
+    name: 'Bitácora',
+    rows: filas,
+    cols: [
+      { wch: 12 }, { wch: 8 }, { wch: 18 }, { wch: 20 }, { wch: 13 },
+      { wch: 11 }, { wch: 8 }, { wch: 40 }, { wch: 18 },
+    ],
+  }]);
 
   const filename = `bitacora_asistencia_${tienda ? tienda.code || tienda.name : 'todas'}.xlsx`.replace(/[^\w.\-]+/g, '_');
   res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
