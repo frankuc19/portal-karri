@@ -87,6 +87,14 @@ function sumaCapacidad(capacityPorRol) {
   return ROLES.reduce((acc, r) => acc + (Number(capacityPorRol?.[r]) || 0), 0);
 }
 
+// Cupo total de una Capacitación. A diferencia de AM/PM/FULL, la Capacitación
+// no se segmenta por rol: es un único pozo de cupos compartido. Se guarda como
+// número (0 = sin límite). Tolera el formato viejo, en que la capacidad se
+// guardaba como objeto por rol vacío ({}): eso se interpreta como sin límite.
+function capacidadCapacitacion(slot) {
+  return typeof slot?.capacity === 'number' ? Math.max(0, Math.floor(slot.capacity)) : 0;
+}
+
 // Detecta Picker/Shopper/Driver a partir del texto libre de "Cliente" en
 // Altas Onboarding — tolera mayúsculas, plural ("Drivers") y texto extra
 // alrededor (p.ej. "SMU Picker Rancagua", "Walmart Driver").
@@ -291,6 +299,9 @@ function createSlot({ storeId, shiftType, date, capacity, startTime, endTime }) 
   if (!tipo) throw new Error('Tipo de turno inválido');
   // Hora elegida a mano (solo Capacitación): se respeta y no se vuelve a derivar.
   const horaFija = Boolean(startTime && endTime);
+  // Capacitación: cupo total único (número; 0 = sin límite). AM/PM/FULL: cupos
+  // por rol { Picker, Shopper, Driver }.
+  const esCapacitacion = shiftType === 'CAPACITACION';
   const slot = {
     id: crypto.randomUUID(),
     storeId,
@@ -299,7 +310,7 @@ function createSlot({ storeId, shiftType, date, capacity, startTime, endTime }) 
     startTime: horaFija ? startTime : tipo.startTime,
     endTime: horaFija ? endTime : tipo.endTime,
     ...(horaFija ? { horaFija: true } : {}),
-    capacity: normalizarCapacidadRol(capacity), // { Picker, Shopper, Driver }
+    capacity: esCapacitacion ? Math.max(0, Math.floor(Number(capacity) || 0)) : normalizarCapacidadRol(capacity),
     status: 'OPEN',
     createdAt: new Date().toISOString(),
   };
@@ -364,7 +375,12 @@ function asignacionesActivasDeSlot(slotId, role) {
 // capacidad primero por si el slot quedó guardado con el formato viejo
 // (un solo número, sin segmentar por rol).
 function cuposDisponibles(slot, role) {
-  if (slot.shiftType === 'CAPACITACION') return Infinity; // sin límite de cupos
+  if (slot.shiftType === 'CAPACITACION') {
+    const cap = capacidadCapacitacion(slot);
+    if (cap <= 0) return Infinity; // 0 = sin límite de cupos
+    // Pozo único compartido: no se segmenta por rol, se cuentan todas las tomas.
+    return Math.max(0, cap - asignacionesActivasDeSlot(slot.id).length);
+  }
   const cap = normalizarCapacidadRol(slot.capacity)[role] || 0;
   return Math.max(0, cap - asignacionesActivasDeSlot(slot.id, role).length);
 }
@@ -573,13 +589,21 @@ function indiceAsignacionesActivasPorSlot() {
 function slotConInfo(slot, indiceActivas) {
   const activasDelSlot = indiceActivas ? (indiceActivas.get(slot.id) || []) : asignacionesActivasDeSlot(slot.id);
 
-  // Capacitación no tiene cupos: siempre disponible, no participa en la
-  // cobertura/planificación de AM/PM/FULL.
+  // Capacitación: pozo único de cupos (no segmentado por rol) y no participa en
+  // la cobertura/planificación de AM/PM/FULL. Con cupo 0 queda "sin límite"
+  // (siempre disponible); con cupo > 0 se comporta como un turno con cupos.
   if (slot.shiftType === 'CAPACITACION') {
+    const cap = capacidadCapacitacion(slot);
+    const taken = activasDelSlot.length;
+    const sinCupo = cap <= 0;
     return {
       ...slot,
-      capacity: null, capacityPorRol: null, porRol: null,
-      taken: activasDelSlot.length, available: null, coverage: null, sinCupo: true,
+      capacity: sinCupo ? null : cap,
+      capacityPorRol: null, porRol: null,
+      taken,
+      available: sinCupo ? null : Math.max(0, cap - taken),
+      coverage: sinCupo ? null : (cap > 0 ? Math.round((taken / cap) * 100) : 0),
+      sinCupo,
     };
   }
   const capacityPorRol = normalizarCapacidadRol(slot.capacity);

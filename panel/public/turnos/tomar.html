@@ -475,7 +475,9 @@ function renderTurnosDelDia() {
     return;
   }
   cont.innerHTML = delDia.map(s => {
-    const sinCupo = s.shiftType === 'CAPACITACION';
+    // Capacitación con cupo 0 queda "sin límite" (el backend marca s.sinCupo);
+    // con cupo > 0 se muestra como un turno con cupos, igual que AM/PM/FULL.
+    const sinCupo = !!s.sinCupo;
     const cls = sinCupo ? 'ok' : (s.available === 0 ? 'full' : (s.coverage >= settings.minimumCoverageWarning ? 'warn' : 'ok'));
     const texto = sinCupo ? 'Sin límite de cupos' : (s.available === 0 ? 'Completo' : `${s.available} / ${s.capacity} cupos`);
     const lleno = !sinCupo && s.available === 0;

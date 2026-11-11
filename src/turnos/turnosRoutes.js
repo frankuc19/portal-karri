@@ -218,14 +218,16 @@ adminRouter.get('/slots/capacitacion', (req, res) => {
   res.json({ ok: true, slots, horarioDefault: { startTime: def?.startTime || '10:30', endTime: def?.endTime || '11:30' } });
 });
 adminRouter.post('/slots/capacitacion', (req, res) => {
-  const { storeId, date, startTime, endTime } = req.body || {};
+  const { storeId, date, startTime, endTime, capacity } = req.body || {};
   if (!storeId || !date) return res.status(400).json({ ok: false, error: 'Faltan datos' });
   const tienda = store.getTiendaById(storeId);
   if (!tienda) return res.status(404).json({ ok: false, error: 'Tienda no encontrada' });
-  const existente = store.getSlots().find(s => s.storeId === storeId && s.date === date && s.shiftType === 'CAPACITACION');
+  // Se permiten varios bloques de Capacitación el mismo día; solo se evita
+  // duplicar exactamente la misma hora de inicio en esa fecha.
+  const existente = store.getSlots().find(s => s.storeId === storeId && s.date === date && s.shiftType === 'CAPACITACION' && s.startTime === startTime);
   if (existente) return res.json({ ok: true, slot: store.slotConInfo(existente), yaExistia: true });
   try {
-    const slot = store.createSlot({ storeId, shiftType: 'CAPACITACION', date, capacity: {}, startTime, endTime });
+    const slot = store.createSlot({ storeId, shiftType: 'CAPACITACION', date, capacity, startTime, endTime });
     res.json({ ok: true, slot: store.slotConInfo(slot) });
   } catch (e) {
     res.status(400).json({ ok: false, error: e.message });
