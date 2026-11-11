@@ -296,7 +296,9 @@ async function continuarLogin() {
     return;
   }
 
-  rut = v;
+  // Usa el RUT ya normalizado por el servidor (sin puntos, con guion), no el
+  // texto crudo que tipeó la persona — así queda consistente en todo el flujo.
+  rut = r.karrier?.rut || v;
   karrier = r.karrier;
   localStorage.setItem('turnos_rut', rut);
   arrancarApp();

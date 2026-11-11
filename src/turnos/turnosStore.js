@@ -11,6 +11,8 @@ const ASIG_FILE       = path.join(DATA_DIR, 'turnos_asignaciones.json');
 const KARRIERS_FILE  = path.join(DATA_DIR, 'turnos_karriers.json');
 const SETTINGS_FILE  = path.join(DATA_DIR, 'turnos_settings.json');
 const SEED_MARKER_FILE = path.join(DATA_DIR, 'turnos_seed_v1.json');
+// Marca de que ya se normalizaron/deduplicaron los Karriers una vez (ver getKarriers).
+const KARRIERS_NORM_MARKER = path.join(DATA_DIR, 'turnos_karriers_norm_v1.json');
 const ASISTENCIA_FILE   = path.join(DATA_DIR, 'turnos_asistencia.json');
 const OBSERVACIONES_FILE = path.join(DATA_DIR, 'turnos_observaciones.json');
 const AUDITORIA_FILE    = path.join(DATA_DIR, 'turnos_auditoria.json');
@@ -106,12 +108,31 @@ function normalizarRolPorCliente(cliente) {
   return null;
 }
 
+// ── RUT: formato único ──────────────────────────────────────────────────────
+// La identidad de un Karrier es su RUT. Para que una misma persona no cree
+// varios Karriers al escribirlo distinto (con/sin puntos, con/sin guion), todo
+// se guarda y se compara en un único formato: SIN PUNTOS y CON GUION antes del
+// dígito verificador. Ej: "16.709.763-4" y "167097634" → "16709763-4".
+function soloDigitosRut(rut) {
+  return String(rut || '').toUpperCase().replace(/[^0-9K]/g, ''); // dígitos + K (clave para Altas)
+}
+function normalizarRut(rut) {
+  const limpio = soloDigitosRut(rut);
+  if (limpio.length < 2) return limpio; // demasiado corto para separar el DV
+  return `${limpio.slice(0, -1)}-${limpio.slice(-1)}`;
+}
+// Dos RUT son el mismo si coinciden sus dígitos+DV, sin importar el formato.
+// (Dos vacíos NO se consideran iguales, para no agrupar registros sin RUT.)
+function mismoRut(a, b) {
+  const da = soloDigitosRut(a);
+  return da !== '' && da === soloDigitosRut(b);
+}
+
 // Determina el rol operativo de un Karrier a partir de su ficha en Altas
 // Onboarding (por RUT). Devuelve null si no está en Altas o si su Cliente no
 // menciona ninguno de los 3 roles.
 function determinarRolKarrier(rut) {
-  const rutKey = String(rut || '').toUpperCase().replace(/[^0-9K]/g, '');
-  const alta = altasStore.getAltaByRutKey(rutKey);
+  const alta = altasStore.getAltaByRutKey(soloDigitosRut(rut));
   if (!alta) return { rol: null, cliente: null };
   return { rol: normalizarRolPorCliente(alta.cliente), cliente: alta.cliente || null };
 }
@@ -248,22 +269,58 @@ function saveSettings(partial) {
 }
 
 // ─── Karriers (registro de prestadores) ────────────────────────────────────────
-function getKarriers() { return readJson(KARRIERS_FILE, []); }
-function getKarrierByRut(rut) { return getKarriers().find(k => k.rut === rut) || null; }
+// Unifica Karriers que son la misma persona con el RUT en formatos distintos.
+// Se queda con un único registro por RUT normalizado: prioriza el estado ACTIVE,
+// conserva el nombre más completo, el primer teléfono disponible y la fecha de
+// creación más antigua. Devuelve también si hubo algún cambio (para no reescribir
+// el archivo si ya estaba todo normalizado).
+function dedupKarriers(list) {
+  const porRut = new Map();
+  let cambios = false;
+  for (const k of list) {
+    const rutN = normalizarRut(k.rut);
+    if (rutN !== k.rut) cambios = true;
+    const previo = porRut.get(rutN);
+    if (!previo) { porRut.set(rutN, { ...k, rut: rutN }); continue; }
+    cambios = true;
+    porRut.set(rutN, {
+      ...previo,
+      rut: rutN,
+      name: (previo.name || '').length >= (k.name || '').length ? previo.name : k.name,
+      phone: previo.phone || k.phone || '',
+      status: (previo.status === 'ACTIVE' || k.status === 'ACTIVE') ? 'ACTIVE' : (previo.status || k.status),
+      createdAt: [previo.createdAt, k.createdAt].filter(Boolean).sort()[0] || previo.createdAt,
+    });
+  }
+  return { list: [...porRut.values()], cambios };
+}
+
+function getKarriers() {
+  const list = readJson(KARRIERS_FILE, []);
+  // Migración única: normaliza el RUT y fusiona duplicados ya existentes.
+  if (readJson(KARRIERS_NORM_MARKER, null) !== null) return list;
+  const { list: unificados, cambios } = dedupKarriers(list);
+  if (cambios) writeJson(KARRIERS_FILE, unificados);
+  writeJson(KARRIERS_NORM_MARKER, { appliedAt: new Date().toISOString() });
+  return cambios ? unificados : list;
+}
+function getKarrierByRut(rut) { return getKarriers().find(k => mismoRut(k.rut, rut)) || null; }
 function saveKarrier(karrier) {
+  const normalizado = { ...karrier, rut: normalizarRut(karrier.rut) };
   const list = getKarriers();
-  const idx = list.findIndex(k => k.rut === karrier.rut);
-  if (idx >= 0) list[idx] = karrier; else list.push(karrier);
+  const idx = list.findIndex(k => mismoRut(k.rut, normalizado.rut));
+  if (idx >= 0) list[idx] = normalizado; else list.push(normalizado);
   writeJson(KARRIERS_FILE, list);
-  return karrier;
+  return normalizado;
 }
 function deleteKarrier(rut) {
-  writeJson(KARRIERS_FILE, getKarriers().filter(k => k.rut !== rut));
+  writeJson(KARRIERS_FILE, getKarriers().filter(k => !mismoRut(k.rut, rut)));
 }
 function ensureKarrier(rut, name, phone) {
-  let k = getKarrierByRut(rut);
+  const rutN = normalizarRut(rut);
+  let k = getKarrierByRut(rutN);
   if (!k) {
-    k = { rut, name: name || rut, phone: phone || '', status: 'ACTIVE', createdAt: new Date().toISOString() };
+    k = { rut: rutN, name: name || rutN, phone: phone || '', status: 'ACTIVE', createdAt: new Date().toISOString() };
     saveKarrier(k);
   }
   return k;
@@ -424,6 +481,7 @@ function err(code) {
 // usa al reasignar: ignora la asignación que se está moviendo al revisar
 // conflictos del propio Karrier ese día (si no, chocaría consigo misma).
 function _validarYCrearAsignacion(slotId, rut, excludeAssignmentId) {
+  rut = normalizarRut(rut); // identidad única: todo se guarda y compara en un solo formato
   const karrier = getKarrierByRut(rut);
   if (!karrier) throw err('INVALID_STORE'); // no debería pasar: el caller registra antes
   if (karrier.status !== 'ACTIVE') throw err('USER_INACTIVE');
@@ -437,8 +495,10 @@ function _validarYCrearAsignacion(slotId, rut, excludeAssignmentId) {
   if (slot.date < new Date().toISOString().slice(0, 10)) throw err('INVALID_DATE');
   if (cuposDisponibles(slot, rol) <= 0) throw err('SHIFT_FULL');
 
+  // Compara contra el historial sin importar el formato con que se guardó el
+  // RUT en asignaciones viejas (mismoRut normaliza ambos lados).
   const misAsignaciones = getAsignaciones()
-    .filter(a => a.karrierRut === rut && a.status === 'ACTIVE' && a.id !== excludeAssignmentId);
+    .filter(a => mismoRut(a.karrierRut, rut) && a.status === 'ACTIVE' && a.id !== excludeAssignmentId);
   if (misAsignaciones.some(a => a.slotId === slotId)) throw err('SHIFT_ALREADY_TAKEN');
 
   const misSlotsHoy = misAsignaciones
@@ -513,7 +573,7 @@ function cancelarTurno(assignmentId, rut, { isAdmin = false, reason = '', actor 
   return conBloqueo(async () => {
     const asignacion = getAsignacionById(assignmentId);
     if (!asignacion) throw err('ASSIGNMENT_NOT_FOUND');
-    if (!isAdmin && asignacion.karrierRut !== rut) throw err('NOT_YOUR_SHIFT');
+    if (!isAdmin && !mismoRut(asignacion.karrierRut, rut)) throw err('NOT_YOUR_SHIFT');
     // La restricción de "permitir cancelación" es para que el Karrier cancele
     // su propio turno; operaciones (isAdmin) siempre puede, desde Asignaciones.
     if (!isAdmin && !getSettings().allowCancellation) throw err('CANCELLATION_DISABLED');
@@ -660,7 +720,7 @@ function disponibilidadTiendaCompleta(storeId) {
 }
 
 function misTurnos(rut) {
-  const asigs = getAsignaciones().filter(a => a.karrierRut === rut);
+  const asigs = getAsignaciones().filter(a => mismoRut(a.karrierRut, rut));
   // Índices O(1): sin esto, cada turno del Karrier rearmaba todos los slots y
   // tiendas, costo que crece con la cantidad de slots acumulados.
   const slotsPorId = new Map(getSlots().map(s => [s.id, s]));
@@ -909,6 +969,7 @@ function listBitacora({ storeId, dateFrom, dateTo } = {}) {
 
 module.exports = {
   SHIFT_TYPES, ROLES, horarioDeTurno,
+  normalizarRut, soloDigitosRut, mismoRut,
   normalizarRolPorCliente, determinarRolKarrier, cuposDisponibles,
   getSettings, saveSettings,
   getTiendas, getTiendaById, saveTienda, deleteTienda,

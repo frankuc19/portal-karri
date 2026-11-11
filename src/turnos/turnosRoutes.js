@@ -451,7 +451,17 @@ adminRouter.get('/karriers', (_req, res) => res.json({ ok: true, karriers: store
 adminRouter.post('/karriers', (req, res) => {
   const { rut, name, phone } = req.body || {};
   if (!rut || !name) return res.status(400).json({ ok: false, error: 'RUT y nombre son requeridos' });
-  const karrier = { rut: rut.trim(), name: name.trim(), phone: (phone || '').trim(), status: 'ACTIVE', createdAt: new Date().toISOString() };
+  // RUT en formato único (sin puntos, con guion). Si ya existe ese RUT, saveKarrier
+  // actualiza el registro en vez de crear un duplicado.
+  const existente = store.getKarrierByRut(rut);
+  const karrier = {
+    ...(existente || {}),
+    rut: store.normalizarRut(rut),
+    name: name.trim(),
+    phone: (phone || '').trim(),
+    status: existente?.status || 'ACTIVE',
+    createdAt: existente?.createdAt || new Date().toISOString(),
+  };
   store.saveKarrier(karrier);
   res.json({ ok: true, karrier });
 });
