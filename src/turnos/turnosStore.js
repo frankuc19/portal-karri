@@ -661,11 +661,15 @@ function disponibilidadTiendaCompleta(storeId) {
 
 function misTurnos(rut) {
   const asigs = getAsignaciones().filter(a => a.karrierRut === rut);
+  // Índices O(1): sin esto, cada turno del Karrier rearmaba todos los slots y
+  // tiendas, costo que crece con la cantidad de slots acumulados.
+  const slotsPorId = new Map(getSlots().map(s => [s.id, s]));
+  const tiendasPorId = new Map(getTiendas().map(t => [t.id, t]));
   return asigs
     .map(a => {
-      const slot = getSlotById(a.slotId);
+      const slot = slotsPorId.get(a.slotId);
       if (!slot) return null;
-      const tienda = getTiendaById(slot.storeId);
+      const tienda = tiendasPorId.get(slot.storeId) || null;
       return { ...a, slot, tienda };
     })
     .filter(Boolean)
@@ -829,13 +833,19 @@ function listAsistenciaDia({ storeId, date }) {
   if (!date) throw err('INVALID_DATE');
   const asistenciaPorId = indiceAsistencia();
   const observacionesPorId = indiceObservaciones();
+  // Índices construidos UNA sola vez. Antes se llamaba getSlotById()/
+  // getTiendaById() por cada asignación activa de toda la historia, y cada
+  // una de esas reconstruía la lista completa de slots y tiendas desde disco
+  // (O(n²), más lento mientras más historial). Con los Map el lookup es O(1).
+  const slotsPorId = new Map(getSlots().map(s => [s.id, s]));
+  const tiendasPorId = new Map(getTiendas().map(t => [t.id, t]));
   return getAsignaciones()
     .filter(a => a.status === 'ACTIVE')
     .map(a => {
-      const slot = getSlotById(a.slotId);
+      const slot = slotsPorId.get(a.slotId);
       if (!slot || slot.date !== date) return null;
       if (storeId && slot.storeId !== storeId) return null;
-      const tienda = getTiendaById(slot.storeId);
+      const tienda = tiendasPorId.get(slot.storeId);
       const asistencia = asistenciaPorId.get(a.id) || null;
       return {
         assignmentId: a.id,
@@ -864,15 +874,20 @@ function listAsistenciaDia({ storeId, date }) {
 function listBitacora({ storeId, dateFrom, dateTo } = {}) {
   const asistenciaPorId = indiceAsistencia();
   const observacionesPorId = indiceObservaciones();
+  // Mismos índices O(1) que en listAsistenciaDia — evita el O(n²) de rearmar
+  // slots y tiendas por cada fila (clave en el export, que recorre todo el
+  // historial y puede generar miles de filas).
+  const slotsPorId = new Map(getSlots().map(s => [s.id, s]));
+  const tiendasPorId = new Map(getTiendas().map(t => [t.id, t]));
   return getAsignaciones()
     .filter(a => a.status === 'ACTIVE')
     .map(a => {
-      const slot = getSlotById(a.slotId);
+      const slot = slotsPorId.get(a.slotId);
       if (!slot) return null;
       if (storeId && slot.storeId !== storeId) return null;
       if (dateFrom && slot.date < dateFrom) return null;
       if (dateTo && slot.date > dateTo) return null;
-      const tienda = getTiendaById(slot.storeId);
+      const tienda = tiendasPorId.get(slot.storeId);
       const asistencia = asistenciaPorId.get(a.id) || null;
       const observaciones = observacionesPorId.get(a.id) || [];
       return {
