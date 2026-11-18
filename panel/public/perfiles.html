@@ -40,7 +40,7 @@
           <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
             <span class="badge-advanced">Advanced</span>
           </div>
-          <p style="font-size:12px;color:rgba(15,23,22,.6);line-height:1.6;">Acceso a 2 o más secciones configurables (Finanzas, Onboarding, etc.).</p>
+          <p style="font-size:12px;color:rgba(15,23,22,.6);line-height:1.6;">Acceso a 2 o más secciones configurables (Onboarding, Operaciones, etc.).</p>
         </div>
         <div class="card">
           <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
@@ -113,6 +113,9 @@
         <p class="label mb-2">Secciones permitidas</p>
         <div id="modal-sections-hint" style="font-size:11px;color:rgba(15,23,22,.4);margin-bottom:10px;"></div>
         <div class="space-y-2">
+          <!-- Módulo "Finanzas" (Devoluciones + Conciliaciones) DESHABILITADO.
+               Para reactivarlo, descomentar este bloque y revertir los cambios
+               de panel/server.js (ver nota en ALL_SECTIONS).
           <label class="sec-option" id="sec-finanzas">
             <input type="checkbox" value="finanzas" onchange="onSecChange(this)">
             <div>
@@ -120,6 +123,7 @@
               <p style="font-size:11px;color:rgba(15,23,22,.4);">Devoluciones y Conciliaciones</p>
             </div>
           </label>
+          -->
           <label class="sec-option" id="sec-onboarding">
             <input type="checkbox" value="onboarding" onchange="onSecChange(this)">
             <div>

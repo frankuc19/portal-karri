@@ -26,14 +26,17 @@
   };
 
   const SECTIONS = [
-    {
-      label: 'Finanzas',
-      perm:  'finanzas',
-      items: [
-        { label: 'Devoluciones',   href: '/',                    icon: 'undo-2', key: 'devoluciones'   },
-        { label: 'Conciliaciones', href: '/conciliaciones.html', icon: 'truck',  key: 'conciliaciones' },
-      ],
-    },
+    // Módulo "Finanzas" (Devoluciones + Conciliaciones) DESHABILITADO.
+    // Para reactivarlo, descomentar este bloque y revertir los cambios de
+    // panel/server.js (ver nota en ALL_SECTIONS).
+    // {
+    //   label: 'Finanzas',
+    //   perm:  'finanzas',
+    //   items: [
+    //     { label: 'Devoluciones',   href: '/',                    icon: 'undo-2', key: 'devoluciones'   },
+    //     { label: 'Conciliaciones', href: '/conciliaciones.html', icon: 'truck',  key: 'conciliaciones' },
+    //   ],
+    // },
     {
       label: 'Onboarding',
       perm:  'onboarding',

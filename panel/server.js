@@ -136,7 +136,11 @@ function migrateLegacyPwd(pwd) {
   return /^[a-f0-9]{64}$/.test(pwd) ? pwd : hashPwd(pwd);
 }
 
-const ALL_SECTIONS = ['finanzas', 'onboarding', 'operaciones', 'capacitacion', 'turnos', 'perfiles'];
+// Módulo "Finanzas" (Devoluciones + Conciliaciones) DESHABILITADO.
+// Para reactivarlo: volver a agregar 'finanzas' acá, restaurar su entrada en
+// SECTION_HOME y PAGE_SECTION, quitar el bloqueo de FINANZAS_DESHABILITADO más
+// abajo, y descomentar la sección "Finanzas" en panel/public/sidebar.js.
+const ALL_SECTIONS = ['onboarding', 'operaciones', 'capacitacion', 'turnos', 'perfiles'];
 
 function loginUser(username, password) {
   const users = readUsers();
@@ -339,7 +343,7 @@ app.post('/api/lms/logs', (req, res) => {
 });
 
 const SECTION_HOME = {
-  finanzas:    '/',
+  // finanzas deshabilitado (ver nota en ALL_SECTIONS)
   onboarding:  '/onboarding/resumen.html',
   operaciones: '/operaciones/tarifario.html',
   capacitacion: '/capacitacion/index.html',
@@ -347,10 +351,18 @@ const SECTION_HOME = {
   perfiles:    '/perfiles.html',
 };
 
+// Primera página de inicio válida para el conjunto de secciones del usuario.
+// Antes el fallback era '/' (Devoluciones); como ese módulo está deshabilitado,
+// se busca la primera sección con home disponible y, si no hay ninguna, /login.
+function primerHome(sections) {
+  for (const sec of (sections || [])) {
+    if (SECTION_HOME[sec]) return SECTION_HOME[sec];
+  }
+  return '/login';
+}
+
 const PAGE_SECTION = {
-  '/':                            'finanzas',
-  '/index.html':                  'finanzas',
-  '/conciliaciones.html':         'finanzas',
+  // '/', '/index.html', '/conciliaciones.html' -> finanzas (deshabilitado)
   '/onboarding/resumen.html':     'onboarding',
   '/onboarding/email.html':       'onboarding',
   '/onboarding/whatsapp.html':    'onboarding',
@@ -379,7 +391,7 @@ app.post('/login', (req, res) => {
     saveSessions(sessions);
     res.setHeader('Set-Cookie', `token=${token}; HttpOnly; Path=/; SameSite=Strict`);
     const sections = session.role === 'admin' ? ALL_SECTIONS : (session.sections || []);
-    return res.redirect(SECTION_HOME[sections[0]] || '/');
+    return res.redirect(primerHome(sections));
   }
   res.redirect('/login?error=1');
 });
@@ -413,9 +425,29 @@ app.use((req, res, next) => {
   if (!s) return next();
   const sections = s.role === 'admin' ? ALL_SECTIONS : (s.sections || []);
   if (!sections.includes(section)) {
-    return res.redirect(SECTION_HOME[sections[0]] || '/');
+    return res.redirect(primerHome(sections));
   }
   next();
+});
+
+// ─── Finanzas deshabilitado ───────────────────────────────────────────────────
+// Devoluciones (raíz "/" e "/index.html") y Conciliaciones quedan fuera de
+// servicio. Como "/" es además el landing histórico del portal, estas páginas
+// ya no se sirven: se redirige a la primera sección disponible del usuario.
+// (Debe ir ANTES de express.static para interceptar el index.html de la raíz.)
+const PAGINAS_FINANZAS = ['/', '/index.html', '/conciliaciones.html'];
+app.get(PAGINAS_FINANZAS, (req, res) => {
+  const s = getSession(req);
+  const sections = s ? (s.role === 'admin' ? ALL_SECTIONS : (s.sections || [])) : [];
+  res.redirect(primerHome(sections));
+});
+// Bloquea las APIs del módulo (Devoluciones + Conciliaciones)
+const APIS_FINANZAS = [
+  '/api/datos', '/api/mensaje', '/api/whatsapp', '/api/contactos',
+  '/api/upload/contactos', '/api/enviar', '/api/conciliaciones',
+];
+app.use(APIS_FINANZAS, (req, res) => {
+  res.status(404).json({ ok: false, error: 'Módulo deshabilitado' });
 });
 
 // Cachea los estáticos en el navegador. Antes se revalidaban en cada
