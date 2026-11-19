@@ -50,6 +50,28 @@ function parseFechaDMY(s) {
   return dt.toISOString().slice(0, 10);
 }
 
+// Normaliza el valor de una celda de fecha a 'YYYY-MM-DD', tolerando:
+//  - Date (cuando se lee el xlsx con cellDates:true)
+//  - número de serie de Excel (epoch 1899-12-30)
+//  - texto D/M/Y o D-M-Y (hojas de Google / CSV)
+function fechaCelda(v) {
+  if (v == null || v === '') return null;
+  if (v instanceof Date) {
+    if (isNaN(v.getTime())) return null;
+    return new Date(Date.UTC(v.getFullYear(), v.getMonth(), v.getDate())).toISOString().slice(0, 10);
+  }
+  if (typeof v === 'number') {
+    if (!isFinite(v) || v <= 0) return null;
+    const ms = Date.UTC(1899, 11, 30) + Math.round(v) * 86400000;
+    const d = new Date(ms);
+    if (isNaN(d.getTime())) return null;
+    const y = d.getUTCFullYear();
+    if (y < 2000 || y > 2100) return null;
+    return d.toISOString().slice(0, 10);
+  }
+  return parseFechaDMY(v);
+}
+
 // Días entre dos 'YYYY-MM-DD' (b - a). null si alguna es inválida.
 function diasEntre(aISO, bISO) {
   if (!aISO || !bISO) return null;
@@ -59,4 +81,4 @@ function diasEntre(aISO, bISO) {
   return Math.round((b - a) / 86400000);
 }
 
-module.exports = { normNombre, normPatente, normCorreo, aEntero, parseFechaDMY, diasEntre };
+module.exports = { normNombre, normPatente, normCorreo, aEntero, parseFechaDMY, fechaCelda, diasEntre };

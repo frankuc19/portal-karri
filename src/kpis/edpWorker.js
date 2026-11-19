@@ -6,7 +6,7 @@
 // de filas, para que el hilo principal no cargue todo en memoria.
 const { parentPort, workerData } = require('worker_threads');
 const XLSX = require('xlsx');
-const { normNombre, normPatente, normCorreo, aEntero, parseFechaDMY } = require('./norm');
+const { normNombre, normPatente, normCorreo, aEntero, fechaCelda } = require('./norm');
 
 // Encuentra el índice de una columna por nombre tolerante (sin tildes/símbolos)
 function idx(headers, alias) {
@@ -18,7 +18,10 @@ function idx(headers, alias) {
 
 try {
   const buf = Buffer.isBuffer(workerData.buffer) ? workerData.buffer : Buffer.from(workerData.buffer);
-  const wb = XLSX.read(buf, { type: 'buffer', cellDates: false, cellNF: false, cellText: true });
+  // SIN cellDates: las celdas de fecha llegan como número de serie de Excel,
+  // que fechaCelda convierte en UTC. (Con cellDates:true SheetJS reconstruye
+  // Date en hora local y se corre un día según la zona horaria del server.)
+  const wb = XLSX.read(buf, { type: 'buffer' });
 
   // Pestaña de datos: "Consolidado EDP" si existe, si no la primera.
   const sheetName = wb.SheetNames.find(n => /consolidado\s*edp/i.test(n)) || wb.SheetNames[0];
@@ -59,7 +62,7 @@ try {
     const cliente = String(get(row, iCliente)).trim() || '—';
     clientes.set(cliente, (clientes.get(cliente) || 0) + 1);
 
-    const fechaISO = parseFechaDMY(get(row, iFecha));
+    const fechaISO = fechaCelda(get(row, iFecha));
     if (fechaISO) {
       if (!fechaMin || fechaISO < fechaMin) fechaMin = fechaISO;
       if (!fechaMax || fechaISO > fechaMax) fechaMax = fechaISO;
