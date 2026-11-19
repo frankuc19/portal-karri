@@ -96,6 +96,8 @@ async function leerAltasOB() {
 
   const iNombre    = buscarColumna(headers, ['nombre', 'nombres', 'conductor', 'nombre completo']);
   const iRut       = buscarColumna(headers, ['rut']);
+  const iPatente   = buscarColumna(headers, ['patente', 'ppu']);
+  const iCorreo    = buscarColumna(headers, ['correo', 'email', 'e-mail', 'mail']);
   const iCelular   = buscarColumna(headers, ['celular', 'telefono', 'fono', 'numero']);
   const iCliente   = buscarColumna(headers, ['cliente']);
   const iSala      = buscarColumna(headers, ['sala/bodega', 'sala / bodega', 'sala', 'bodega']);
@@ -120,6 +122,8 @@ async function leerAltasOB() {
       nombre:     normalizarNombre(get(row, iNombre)),
       rut:        formatearRut(get(row, iRut)),
       rutKey:     limpiarRut(get(row, iRut)),
+      patente:    get(row, iPatente),
+      correo:     get(row, iCorreo),
       celular:    get(row, iCelular),
       cliente:    get(row, iCliente),
       salaBodega: get(row, iSala),

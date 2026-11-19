@@ -39,6 +39,9 @@ const cencoRoutes = require('../src/tarifario/cencoRoutes');
 const cencoPagoRoutes = require('../src/tarifario/cencoPagoRoutes');
 const falabellaRoutes = require('../src/tarifario/falabella/falabellaRoutes');
 
+const kpisRoutes       = require('../src/kpis/kpisRoutes');
+const produccionStore  = require('../src/kpis/produccionStore');
+
 const DELAY_MS   = 5000;
 const PORT       = process.env.PORT || 3000;
 const USA_SHEETS = !!process.env.GOOGLE_SHEET_ID;
@@ -140,7 +143,7 @@ function migrateLegacyPwd(pwd) {
 // Para reactivarlo: volver a agregar 'finanzas' acá, restaurar su entrada en
 // SECTION_HOME y PAGE_SECTION, quitar el bloqueo de FINANZAS_DESHABILITADO más
 // abajo, y descomentar la sección "Finanzas" en panel/public/sidebar.js.
-const ALL_SECTIONS = ['onboarding', 'operaciones', 'capacitacion', 'turnos', 'perfiles'];
+const ALL_SECTIONS = ['onboarding', 'operaciones', 'kpis', 'capacitacion', 'turnos', 'perfiles'];
 
 function loginUser(username, password) {
   const users = readUsers();
@@ -346,6 +349,7 @@ const SECTION_HOME = {
   // finanzas deshabilitado (ver nota en ALL_SECTIONS)
   onboarding:  '/onboarding/resumen.html',
   operaciones: '/operaciones/tarifario.html',
+  kpis:        '/kpis/index.html',
   capacitacion: '/capacitacion/index.html',
   turnos:      '/turnos/dashboard.html',
   perfiles:    '/perfiles.html',
@@ -370,6 +374,7 @@ const PAGE_SECTION = {
   '/onboarding/kpi.html':              'onboarding',
   '/operaciones/tarifario.html':       'operaciones',
   '/operaciones/estado-pago.html':     'operaciones',
+  '/kpis/index.html':                  'kpis',
   '/capacitacion/index.html':          'capacitacion',
   '/capacitacion/lms.html':            'capacitacion',
   '/turnos/dashboard.html':            'turnos',
@@ -534,6 +539,9 @@ app.use('/api/ob/altas',     requireAuthApi, altasRoutes);
 
 // ─── API: turnos (administración, solo panel) ─────────────────────────────────
 app.use('/api/turnos/admin', requireAuthApi, turnosAdminRoutes);
+
+// ─── API: KPIs (Altas vs Producción) ──────────────────────────────────────────
+app.use('/api/kpis', requireAuthApi, kpisRoutes);
 
 // ─── API: tarifario Cenco (por polígono) ──────────────────────────────────────
 app.use('/api/tarifario/cenco', requireAuthApi, cencoRoutes);
@@ -1075,4 +1083,5 @@ server.listen(PORT, () => {
   console.log('');
   scheduleCleanup();
   scheduleAltasSync();
+  produccionStore.scheduleRefresh();
 });

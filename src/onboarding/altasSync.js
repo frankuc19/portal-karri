@@ -79,6 +79,8 @@ async function sincronizarAltasOB({ desdeCero = false } = {}) {
       nombre: fila.nombre,
       rut: fila.rut,
       rutKey: fila.rutKey,
+      patente: fila.patente,
+      correo: fila.correo,
       celular: fila.celular,
       cliente: fila.cliente,
       salaBodega: fila.salaBodega,

@@ -56,6 +56,13 @@
       ],
     },
     {
+      label: 'KPIs',
+      perm:  'kpis',
+      items: [
+        { label: 'Altas vs Producción', href: '/kpis/index.html', icon: 'activity', key: 'kpis-altas-prod' },
+      ],
+    },
+    {
       label: 'Capacitación',
       perm:  'capacitacion',
       items: [
