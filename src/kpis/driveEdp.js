@@ -33,6 +33,12 @@ function fechaFinDeNombre(name) {
   return m ? m[1] : '';
 }
 
+// Fecha inicio: "Consolidado_EDP_2026-07-01_a_..." → "2026-07-01"
+function fechaInicioDeNombre(name) {
+  const m = String(name || '').match(/_(\d{4}-\d{2}-\d{2})_a_/);
+  return m ? m[1] : '';
+}
+
 // Variantes que NO son el consolidado "oficial" más reciente.
 function esVariante(name) {
   return /OLD|sin_?walmart|\(\d+\)|Operaciones/i.test(String(name || ''));
@@ -77,8 +83,10 @@ async function elegirArchivoEdp() {
   }
   candidatos.sort((a, b) => {
     const fa = fechaFinDeNombre(a.name), fb = fechaFinDeNombre(b.name);
-    if (fa !== fb) return fb.localeCompare(fa);                // fecha-fin más reciente primero
-    return String(b.modifiedTime).localeCompare(String(a.modifiedTime));
+    if (fa !== fb) return fb.localeCompare(fa);                // 1) fecha-fin más reciente
+    const ia = fechaInicioDeNombre(a.name), ib = fechaInicioDeNombre(b.name);
+    if (ia !== ib) return ia.localeCompare(ib);               // 2) rango más amplio (inicio más antiguo)
+    return String(b.modifiedTime).localeCompare(String(a.modifiedTime)); // 3) modificado más reciente
   });
   return candidatos[0];
 }
