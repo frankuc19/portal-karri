@@ -209,6 +209,31 @@ app.use((err, req, res, next) => {
   next(err);
 });
 
+// ─── Google Analytics (GA4) ───────────────────────────────────────────────────
+// Carga el tag de GA4 solo si GA_MEASUREMENT_ID está definido (formato
+// G-XXXXXXXXXX). Así se activa/desactiva por variable de entorno, sin tocar
+// código ni dejar el ID hardcodeado. Público (lo piden todas las páginas,
+// incluida la de login), antes de requireAuth.
+app.get('/analytics.js', (req, res) => {
+  const id = (process.env.GA_MEASUREMENT_ID || '').trim();
+  res.set('Content-Type', 'application/javascript; charset=utf-8');
+  res.set('Cache-Control', 'public, max-age=300');
+  if (!/^G-[A-Z0-9]+$/i.test(id)) {
+    return res.send('/* Google Analytics no configurado: define GA_MEASUREMENT_ID (G-XXXXXXXXXX). */');
+  }
+  res.send(
+`(function(){
+  var ID=${JSON.stringify(id)};
+  var s=document.createElement('script');
+  s.async=true; s.src='https://www.googletagmanager.com/gtag/js?id='+encodeURIComponent(ID);
+  document.head.appendChild(s);
+  window.dataLayer=window.dataLayer||[];
+  window.gtag=function(){dataLayer.push(arguments);};
+  gtag('js', new Date());
+  gtag('config', ID);
+})();`);
+});
+
 // ─── Login (rutas publicas) ───────────────────────────────────────────────────
 app.get('/login', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'login.html'));
