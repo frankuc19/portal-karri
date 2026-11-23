@@ -202,6 +202,14 @@ function clienteDeTienda(nombre) {
   return CLIENTES.find(c => c.match.some(k => n.includes(k))) || null;
 }
 
+// JSON seguro para incrustar dentro de un atributo HTML con comillas simples
+// (p. ej. onclick='fn(...)'). Escapa ' y & para que un valor como la dirección
+// "Av. ... O'Higgins 964" no cierre el atributo antes de tiempo y rompa el
+// handler. El navegador decodifica &#39; de vuelta a ' al parsear el atributo.
+function jsonAttr(o) {
+  return JSON.stringify(o).replace(/&/g, '&amp;').replace(/'/g, '&#39;');
+}
+
 let rut = localStorage.getItem('turnos_rut') || '';
 let karrier = null;
 let tiendaActual = JSON.parse(localStorage.getItem('turnos_tienda') || 'null');
@@ -396,7 +404,7 @@ function seleccionarCliente(key) {
     cont.innerHTML = '<div class="empty">No hay tiendas disponibles para este cliente.</div>';
   } else {
     cont.innerHTML = grupo.tiendas.map(t => `
-      <div class="store-card" onclick='seleccionarTienda(${JSON.stringify(t)})'>
+      <div class="store-card" onclick='seleccionarTienda(${jsonAttr(t)})'>
         <div class="name">${t.name}</div>
         <div class="commune">${t.commune || ''}</div>
         <div class="avail">${t.turnosDisponibles} turnos disponibles</div>
@@ -491,7 +499,7 @@ function renderTurnosDelDia() {
           <div class="shrs">${s.startTime} - ${s.endTime}</div>
           <div class="scupos ${cls}">${texto}</div>
         </div>
-        <button class="btn btn-primary btn-sm" ${lleno ? 'disabled' : ''} onclick='abrirConfirmacion(${JSON.stringify(s)})'>Tomar</button>
+        <button class="btn btn-primary btn-sm" ${lleno ? 'disabled' : ''} onclick='abrirConfirmacion(${jsonAttr(s)})'>Tomar</button>
       </div>`;
   }).join('');
 }
@@ -536,7 +544,7 @@ async function cargarMisTurnos() {
         <div class="mdate">${DIAS_LARGO[d.getDay()].replace(/^\w/, c => c.toUpperCase())} ${d.getDate()}/${d.getMonth()+1}</div>
         <div class="mturno">${TURNO_LABEL[t.slot.shiftType]} · ${t.slot.startTime}-${t.slot.endTime}</div>
         <span class="mstatus ${t.status}">${t.status === 'ACTIVE' ? 'Confirmado' : 'Cancelado'}</span>
-        ${puedeCancelar ? `<button class="btn btn-ghost btn-sm" style="margin-top:8px;" onclick='cancelarTurno(${JSON.stringify(t.id)})'>Cancelar turno</button>` : ''}
+        ${puedeCancelar ? `<button class="btn btn-ghost btn-sm" style="margin-top:8px;" onclick='cancelarTurno(${jsonAttr(t.id)})'>Cancelar turno</button>` : ''}
       </div>`;
   }).join('');
 }
