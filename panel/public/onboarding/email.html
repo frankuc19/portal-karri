@@ -9,173 +9,142 @@
 <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/styles.css">
-<link rel="stylesheet" href="/assets/tailwind.css">
-</head>
+<style>
+  .ed-head { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:8px 10px; border-bottom:1px solid var(--border); flex-wrap:wrap; }
+  .ed-tabs { display:inline-flex; gap:4px; background:var(--bg-600); border-radius:9px; padding:3px; }
+  .ed-tab { border:none; background:none; cursor:pointer; padding:6px 14px; border-radius:7px; font-size:12.5px; font-weight:600; color:var(--text-muted); display:inline-flex; align-items:center; gap:5px; }
+  .ed-tab.active { background:var(--bg-800); color:var(--text); box-shadow:0 1px 3px rgba(0,0,0,.12); }
+  .ed-toolbar { display:flex; align-items:center; gap:3px; flex-wrap:wrap; padding:7px 10px; border-bottom:1px solid var(--border); background:var(--bg-900); }
+  .tbtn { width:30px; height:30px; border:1px solid transparent; background:none; border-radius:7px; cursor:pointer; color:var(--text-muted); display:inline-flex; align-items:center; justify-content:center; }
+  .tbtn:hover { background:var(--bg-600); color:var(--text); }
+  .tsep { width:1px; height:18px; background:var(--border); margin:0 4px; }
+  .ed-body { position:relative; flex:1; min-height:360px; }
+  .ed-visual { position:absolute; inset:0; overflow:auto; padding:22px; background:#ffffff; color:#1a1a1a; outline:none; }
+  .ed-code { position:absolute; inset:0; width:100%; height:100%; border:none; outline:none; resize:none; padding:16px; font-family:'JetBrains Mono',monospace; font-size:12.5px; line-height:1.6; tab-size:2; white-space:pre; background:var(--bg-800); color:var(--text); box-sizing:border-box; overflow:auto; }
+  .ed-preview { position:absolute; inset:0; width:100%; height:100%; border:none; background:#ffffff; }
+  .ed-foot { padding:7px 12px; border-top:1px solid var(--border); display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; }
+  .var-chip { display:inline-block; font-family:'JetBrains Mono',monospace; font-size:11px; background:rgba(var(--electric-tint),.12); color:var(--electric-text); border-radius:6px; padding:1px 7px; margin:2px 3px 0 0; cursor:pointer; }
+  .mini { font-size:11px; color:var(--text-muted); }
+  .fieldlabel { font-size:11px; font-weight:600; color:var(--text-muted); text-transform:uppercase; letter-spacing:.03em; margin-bottom:4px; display:block; }
+</style>
+<link rel="stylesheet" href="/assets/tailwind.css"></head>
 <body>
 <div class="flex h-screen overflow-hidden">
   <aside id="sidebar" class="sidebar"></aside>
 
   <div class="flex-1 flex flex-col min-w-0 overflow-hidden">
-    <header style="background:#ffffff;border-bottom:1px solid rgba(15,23,22,0.08);" class="h-14 flex items-center justify-between px-5 flex-shrink-0">
+    <header style="background:var(--bg-800);border-bottom:1px solid var(--border);" class="h-14 flex items-center justify-between px-5 flex-shrink-0">
       <div class="flex items-center gap-3">
-        <span style="color:#059669;"><i data-lucide="mail" class="w-4 h-4"></i></span>
-        <h1 style="font-size:15px;font-weight:600;color:#12181a;">Email masivo</h1>
+        <span style="color:var(--electric-text);"><i data-lucide="mail" class="w-4 h-4"></i></span>
+        <h1 style="font-size:15px;font-weight:600;">Email masivo</h1>
       </div>
-      <!-- Steps -->
-      <div class="flex items-center gap-2" id="stepsBar"></div>
+      <div class="flex items-center gap-2">
+        <select id="tplSelect" class="input" style="width:auto;max-width:200px;padding:7px 10px;" onchange="usarPlantilla(this.value)">
+          <option value="">Plantillas…</option>
+        </select>
+        <button class="btn-secondary" onclick="guardarPlantilla()"><i data-lucide="save" class="w-3.5 h-3.5"></i> Guardar plantilla</button>
+      </div>
     </header>
 
     <div class="flex-1 overflow-y-auto p-5">
-      <!-- Step 1: Contactos -->
-      <div id="step-contacts" class="max-w-2xl mx-auto space-y-4">
-        <div class="card">
-          <p style="font-size:14px;font-weight:600;margin-bottom:4px;">Subir lista de contactos</p>
-          <p class="label">Archivo Excel (.xlsx) o CSV con columnas: nombre, correo, y variables {{dobles_llaves}}</p>
-          <div id="drop-contacts" class="drop-zone mt-4" onclick="document.getElementById('inp-contacts').click()" ondragover="ev(event,'contacts','over')" ondragleave="ev(event,'contacts','leave')" ondrop="ev(event,'contacts','drop')">
-            <i data-lucide="upload" style="width:32px;height:32px;color:rgba(5,150,105,.4);margin:0 auto 12px;display:block;"></i>
-            <p style="color:#12181a;font-size:13px;margin-bottom:4px;">Arrastra tu archivo aquí</p>
-            <p style="color:rgba(15,23,22,.35);font-size:12px;">o haz clic para seleccionar</p>
-          </div>
-          <input id="inp-contacts" type="file" accept=".xlsx,.csv,.xls" class="hidden" onchange="handleContacts(this.files[0])">
-          <div id="contacts-info" class="hidden mt-3 p-3 rounded-lg" style="background:#ffffff;border:1px solid rgba(5,150,105,.2);">
-            <p id="contacts-name" style="font-size:13px;font-weight:600;color:#059669;"></p>
-            <p id="contacts-count" style="font-size:11px;color:rgba(15,23,22,.5);margin-top:2px;"></p>
-          </div>
-        </div>
-        <div class="flex justify-end">
-          <button id="btn-contacts-next" onclick="goStep('html')" disabled class="btn-primary">
-            Siguiente <i data-lucide="chevron-right" class="w-4 h-4"></i>
-          </button>
-        </div>
-      </div>
+      <div class="grid lg:grid-cols-3 gap-5 items-start">
 
-      <!-- Step 2: HTML -->
-      <div id="step-html" class="hidden max-w-2xl mx-auto space-y-4">
-        <div class="card">
-          <p style="font-size:14px;font-weight:600;margin-bottom:4px;">Plantilla HTML del correo</p>
-          <p class="label">Usa {{nombre}}, {{correo}}, etc. para personalizar</p>
-          <!-- Tabs -->
-          <div style="display:flex;gap:8px;margin:16px 0 12px;">
-            <button id="tab-upload" onclick="setHtmlTab('upload')" class="btn-secondary" style="font-size:11px;">Subir archivo</button>
-            <button id="tab-library" onclick="setHtmlTab('library')" class="btn-secondary" style="font-size:11px;">Librería</button>
-          </div>
-          <div id="html-upload-panel">
-            <div id="drop-html" class="drop-zone" onclick="document.getElementById('inp-html').click()" ondragover="ev(event,'html','over')" ondragleave="ev(event,'html','leave')" ondrop="ev(event,'html','drop')">
-              <i data-lucide="file-code" style="width:32px;height:32px;color:rgba(5,150,105,.4);margin:0 auto 12px;display:block;"></i>
-              <p style="color:#12181a;font-size:13px;margin-bottom:4px;">Arrastra tu HTML aquí</p>
-              <p style="color:rgba(15,23,22,.35);font-size:12px;">o haz clic para seleccionar</p>
+        <!-- ───── Editor del correo (ancho) ───── -->
+        <div class="lg:col-span-2 card" style="padding:0;display:flex;flex-direction:column;min-height:580px;overflow:hidden;">
+          <div class="ed-head">
+            <div class="ed-tabs">
+              <button class="ed-tab active" data-m="visual" onclick="setMode('visual')"><i data-lucide="type" style="width:14px;height:14px;"></i> Visual</button>
+              <button class="ed-tab" data-m="code" onclick="setMode('code')"><i data-lucide="code-2" style="width:14px;height:14px;"></i> HTML</button>
+              <button class="ed-tab" data-m="preview" onclick="setMode('preview')"><i data-lucide="eye" style="width:14px;height:14px;"></i> Vista previa</button>
             </div>
-            <input id="inp-html" type="file" accept=".html,.htm" class="hidden" onchange="handleHtml(this.files[0])">
-            <div id="html-info" class="hidden mt-3 p-3 rounded-lg" style="background:#ffffff;border:1px solid rgba(5,150,105,.2);">
-              <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:2px;">
-                <p id="html-name" style="font-size:13px;font-weight:600;color:#059669;"></p>
-                <button onclick="abrirEditor()" class="btn-secondary" style="font-size:11px;padding:3px 10px;white-space:nowrap;flex-shrink:0;">
-                  <i data-lucide="eye" style="width:12px;height:12px;"></i> Vista previa / Editar
-                </button>
+            <select id="varSelect" class="input" style="width:auto;padding:6px 10px;font-size:12px;" onchange="insertVar(this.value); this.value='';">
+              <option value="">Insertar variable…</option>
+            </select>
+          </div>
+
+          <!-- Barra de formato (modo visual) -->
+          <div class="ed-toolbar" id="vToolbar">
+            <button class="tbtn" title="Negrita" onmousedown="cmd(event,'bold')"><i data-lucide="bold" style="width:15px;height:15px;"></i></button>
+            <button class="tbtn" title="Cursiva" onmousedown="cmd(event,'italic')"><i data-lucide="italic" style="width:15px;height:15px;"></i></button>
+            <button class="tbtn" title="Subrayado" onmousedown="cmd(event,'underline')"><i data-lucide="underline" style="width:15px;height:15px;"></i></button>
+            <span class="tsep"></span>
+            <button class="tbtn" title="Título" onmousedown="bloque(event,'H2')"><i data-lucide="heading" style="width:15px;height:15px;"></i></button>
+            <button class="tbtn" title="Texto normal" onmousedown="bloque(event,'P')"><i data-lucide="pilcrow" style="width:15px;height:15px;"></i></button>
+            <button class="tbtn" title="Lista con viñetas" onmousedown="cmd(event,'insertUnorderedList')"><i data-lucide="list" style="width:15px;height:15px;"></i></button>
+            <button class="tbtn" title="Lista numerada" onmousedown="cmd(event,'insertOrderedList')"><i data-lucide="list-ordered" style="width:15px;height:15px;"></i></button>
+            <span class="tsep"></span>
+            <button class="tbtn" title="Alinear izquierda" onmousedown="cmd(event,'justifyLeft')"><i data-lucide="align-left" style="width:15px;height:15px;"></i></button>
+            <button class="tbtn" title="Centrar" onmousedown="cmd(event,'justifyCenter')"><i data-lucide="align-center" style="width:15px;height:15px;"></i></button>
+            <button class="tbtn" title="Alinear derecha" onmousedown="cmd(event,'justifyRight')"><i data-lucide="align-right" style="width:15px;height:15px;"></i></button>
+            <span class="tsep"></span>
+            <button class="tbtn" title="Enlace" onmousedown="enlace(event)"><i data-lucide="link" style="width:15px;height:15px;"></i></button>
+            <button class="tbtn" title="Imagen (URL)" onmousedown="imagen(event)"><i data-lucide="image" style="width:15px;height:15px;"></i></button>
+            <label class="tbtn" title="Color de texto" style="position:relative;">
+              <i data-lucide="palette" style="width:15px;height:15px;"></i>
+              <input type="color" style="position:absolute;inset:0;opacity:0;cursor:pointer;" onchange="color(event, this.value)">
+            </label>
+            <button class="tbtn" title="Quitar formato" onmousedown="cmd(event,'removeFormat')"><i data-lucide="eraser" style="width:15px;height:15px;"></i></button>
+          </div>
+
+          <div class="ed-body">
+            <div id="edVisual" class="ed-visual" contenteditable="true" oninput="onVisualInput()"></div>
+            <textarea id="edCode" class="ed-code" style="display:none;" spellcheck="false" oninput="onCodeInput()"></textarea>
+            <iframe id="edPreview" class="ed-preview" style="display:none;"></iframe>
+          </div>
+
+          <div class="ed-foot">
+            <span class="mini" id="edHint">El modo <b>Visual</b> es para escribir sin saber HTML. Usa <b>HTML</b> para pegar/editar código, y <b>Vista previa</b> para ver el correo final.</span>
+          </div>
+        </div>
+
+        <!-- ───── Configuración / Contactos / Enviar ───── -->
+        <div class="space-y-4">
+
+          <div class="card">
+            <p style="font-size:13px;font-weight:600;margin-bottom:8px;">1 · Contactos</p>
+            <div id="drop-contacts" class="drop-zone" onclick="document.getElementById('inp-contacts').click()" ondragover="ev(event,'over')" ondragleave="ev(event,'leave')" ondrop="ev(event,'drop')" style="padding:18px;">
+              <i data-lucide="upload" style="width:26px;height:26px;color:var(--electric-text);opacity:.5;margin:0 auto 8px;display:block;"></i>
+              <p style="font-size:12.5px;">Arrastra tu Excel/CSV o haz clic</p>
+              <p class="mini" style="margin-top:2px;">Columnas: nombre, correo y variables {{…}}</p>
+            </div>
+            <input id="inp-contacts" type="file" accept=".xlsx,.csv,.xls" class="hidden" onchange="handleContacts(this.files[0])">
+            <div id="contacts-info" class="hidden" style="margin-top:10px;padding:10px;border-radius:9px;background:rgba(var(--electric-tint),.08);border:1px solid rgba(var(--electric-tint),.25);">
+              <p id="contacts-name" style="font-size:12.5px;font-weight:600;color:var(--electric-text);"></p>
+              <p id="contacts-count" class="mini" style="margin-top:2px;"></p>
+              <div id="contacts-vars" style="margin-top:6px;"></div>
+            </div>
+          </div>
+
+          <div class="card space-y-3">
+            <p style="font-size:13px;font-weight:600;">2 · Campaña</p>
+            <div><span class="fieldlabel">Nombre de la campaña</span><input id="cfg-name" type="text" class="input" placeholder="Ej: Bienvenida Q2 2026"></div>
+            <div><span class="fieldlabel">Asunto del correo</span><input id="cfg-subject" type="text" class="input" placeholder="¡Bienvenido a Karri!"></div>
+            <div class="grid grid-cols-2 gap-2">
+              <div><span class="fieldlabel">Remitente</span><input id="cfg-fromName" type="text" class="input" value="Karri Onboarding"></div>
+              <div><span class="fieldlabel">Email</span><input id="cfg-fromEmail" type="email" class="input" value="karrionboarding@karri.cl"></div>
+            </div>
+            <input id="cfg-webhook" type="hidden" value="https://primary-2qjg-production.up.railway.app/webhook/73fdfddd-1edb-415d-9f44-fd67bc19d405">
+          </div>
+
+          <div class="card">
+            <p style="font-size:13px;font-weight:600;margin-bottom:8px;">3 · Enviar</p>
+            <div id="send-progress" class="hidden" style="margin-bottom:10px;">
+              <p id="send-status" class="mini" style="margin-bottom:6px;"></p>
+              <div style="height:5px;background:var(--bg-600);border-radius:99px;overflow:hidden;">
+                <div id="send-bar" style="height:100%;background:var(--electric-text);width:0%;transition:width .3s;"></div>
               </div>
-              <p id="html-vars" style="font-size:11px;color:rgba(15,23,22,.5);margin-top:2px;"></p>
-              <!-- Guardar como plantilla -->
-              <div style="display:flex;gap:8px;align-items:center;margin-top:10px;">
-                <input id="tpl-name" type="text" placeholder="Nombre de plantilla..." class="input" style="font-size:11px;padding:5px 10px;">
-                <button onclick="guardarPlantilla()" class="btn-secondary" style="font-size:11px;white-space:nowrap;">
-                  <i data-lucide="save" class="w-3.5 h-3.5"></i> Guardar
-                </button>
-              </div>
-              <p id="tpl-saved-msg" class="hidden" style="font-size:11px;color:#059669;margin-top:6px;">✓ Plantilla guardada</p>
             </div>
-          </div>
-          <div id="html-library-panel" class="hidden">
-            <div id="tpl-list" style="max-height:300px;overflow-y:auto;" class="space-y-2"></div>
-          </div>
-        </div>
-        <div class="flex justify-between">
-          <button onclick="goStep('contacts')" class="btn-secondary"><i data-lucide="chevron-left" class="w-4 h-4"></i> Atrás</button>
-          <button id="btn-html-next" onclick="goStep('config')" disabled class="btn-primary">Siguiente <i data-lucide="chevron-right" class="w-4 h-4"></i></button>
-        </div>
-      </div>
-
-      <!-- Step 3: Config -->
-      <div id="step-config" class="hidden max-w-2xl mx-auto space-y-4">
-        <div class="card space-y-4">
-          <p style="font-size:14px;font-weight:600;">Configurar campaña</p>
-          <div><p class="label mb-1">Nombre de la campaña</p><input id="cfg-name" type="text" class="input" placeholder="Ej: Bienvenida Q2 2025"></div>
-          <div><p class="label mb-1">Asunto del correo</p><input id="cfg-subject" type="text" class="input" placeholder="¡Bienvenido a Karri!"></div>
-          <div class="grid grid-cols-2 gap-3">
-            <div><p class="label mb-1">Nombre remitente</p><input id="cfg-fromName" type="text" class="input" value="Karri Onboarding"></div>
-            <div><p class="label mb-1">Email remitente</p><input id="cfg-fromEmail" type="email" class="input" value="karrionboarding@karri.cl"></div>
-          </div>
-          <input id="cfg-webhook" type="hidden" value="https://primary-2qjg-production.up.railway.app/webhook/73fdfddd-1edb-415d-9f44-fd67bc19d405">
-        </div>
-        <div class="flex justify-between">
-          <button onclick="goStep('html')" class="btn-secondary"><i data-lucide="chevron-left" class="w-4 h-4"></i> Atrás</button>
-          <button id="btn-config-next" onclick="goStep('send')" class="btn-primary">Siguiente <i data-lucide="chevron-right" class="w-4 h-4"></i></button>
-        </div>
-      </div>
-
-      <!-- Step 4: Enviar -->
-      <div id="step-send" class="hidden max-w-2xl mx-auto space-y-4">
-        <div class="card space-y-3">
-          <p style="font-size:14px;font-weight:600;">Resumen de campaña</p>
-          <div style="background:#ffffff;border-radius:10px;padding:16px;display:grid;grid-template-columns:1fr 1fr;gap:12px;">
-            <div><p class="label">Campaña</p><p id="sum-name" style="font-size:13px;color:#12181a;margin-top:2px;"></p></div>
-            <div><p class="label">Contactos</p><p id="sum-count" style="font-size:13px;color:#059669;font-weight:700;margin-top:2px;"></p></div>
-            <div><p class="label">Asunto</p><p id="sum-subject" style="font-size:13px;color:#12181a;margin-top:2px;"></p></div>
-            <div><p class="label">Variables</p><p id="sum-vars" style="font-size:13px;color:#12181a;margin-top:2px;"></p></div>
-          </div>
-          <!-- Progress -->
-          <div id="send-progress" class="hidden">
-            <p id="send-status" style="font-size:12px;color:rgba(15,23,22,.6);margin-bottom:8px;"></p>
-            <div style="height:4px;background:#f1f3f2;border-radius:99px;overflow:hidden;">
-              <div id="send-bar" style="height:100%;background:#78fcd6;width:0%;transition:width .3s;box-shadow:0 0 8px rgba(5,150,105,.5);"></div>
+            <div id="send-done" class="hidden" style="margin-bottom:10px;padding:10px;border-radius:9px;background:rgba(var(--electric-tint),.08);border:1px solid rgba(var(--electric-tint),.25);">
+              <p style="color:var(--electric-text);font-weight:600;font-size:12.5px;">✓ Campaña enviada</p>
+              <p id="send-result" class="mini" style="margin-top:2px;"></p>
             </div>
+            <p id="send-error" class="hidden" style="color:#dc2626;font-size:12px;margin-bottom:10px;"></p>
+            <button id="btn-send" onclick="enviar()" class="btn-primary w-full" style="justify-content:center;">
+              <i data-lucide="send" class="w-3.5 h-3.5"></i> Enviar campaña
+            </button>
+            <p class="mini" id="send-hint" style="margin-top:8px;text-align:center;">Sube contactos y completa el asunto para enviar.</p>
           </div>
-          <div id="send-done" class="hidden p-4 rounded-xl" style="background:rgba(5,150,105,.05);border:1px solid rgba(5,150,105,.2);">
-            <p style="color:#059669;font-weight:600;font-size:13px;">✓ Campaña enviada exitosamente</p>
-            <p id="send-result" style="font-size:11px;color:rgba(15,23,22,.5);margin-top:4px;"></p>
-          </div>
-          <p id="send-error" class="hidden" style="color:#dc2626;font-size:12px;"></p>
-        </div>
-        <div class="flex justify-between">
-          <button onclick="goStep('config')" class="btn-secondary"><i data-lucide="chevron-left" class="w-4 h-4"></i> Atrás</button>
-          <button id="btn-send" onclick="enviar()" class="btn-primary">
-            <i data-lucide="send" class="w-3.5 h-3.5"></i> Enviar campaña
-          </button>
-        </div>
-      </div>
-    </div>
-  </div>
-</div>
 
-<!-- Modal: Vista previa / Editar HTML -->
-<div id="modal-editor" class="hidden fixed inset-0 z-50 flex items-center justify-center" style="background:rgba(0,0,0,.85);">
-  <div style="background:#ffffff;border:1px solid rgba(15,23,22,.1);border-radius:14px;width:90vw;max-width:1100px;height:87vh;display:flex;flex-direction:column;overflow:hidden;">
-    <!-- Header tabs -->
-    <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-bottom:1px solid rgba(15,23,22,.08);flex-shrink:0;">
-      <div style="display:flex;gap:6px;">
-        <button id="etab-preview" onclick="setViewTabEditor('preview')" class="btn-secondary" style="font-size:11px;padding:4px 12px;">
-          <i data-lucide="eye" style="width:12px;height:12px;"></i> Vista previa
-        </button>
-        <button id="etab-code" onclick="setViewTabEditor('code')" class="btn-secondary" style="font-size:11px;padding:4px 12px;">
-          <i data-lucide="code-2" style="width:12px;height:12px;"></i> Editar HTML
-        </button>
-      </div>
-      <button onclick="cerrarEditor()" style="background:none;border:none;cursor:pointer;color:rgba(15,23,22,.4);font-size:20px;line-height:1;padding:0 2px;" onmouseenter="this.style.color='#12181a'" onmouseleave="this.style.color='rgba(15,23,22,.4)'">✕</button>
-    </div>
-    <!-- Preview panel -->
-    <div id="epanel-preview" style="flex:1;overflow:hidden;display:flex;">
-      <iframe id="html-iframe" srcdoc="" style="width:100%;height:100%;border:none;background:white;"></iframe>
-    </div>
-    <!-- Code panel -->
-    <div id="epanel-code" style="flex:1;flex-direction:column;overflow:hidden;display:none;">
-      <textarea id="html-editor"
-                style="flex:1;background:#ffffff;color:#12181a;border:none;padding:16px;font-family:'JetBrains Mono',monospace;font-size:12px;resize:none;outline:none;overflow-y:auto;tab-size:2;white-space:pre;line-height:1.6;width:100%;box-sizing:border-box;"></textarea>
-      <div style="padding:10px 14px;border-top:1px solid rgba(15,23,22,.08);display:flex;justify-content:space-between;align-items:center;flex-shrink:0;">
-        <span id="editor-vars-hint" style="font-size:11px;color:rgba(15,23,22,.35);"></span>
-        <div style="display:flex;gap:8px;">
-          <button onclick="cerrarEditor()" class="btn-secondary" style="font-size:11px;">Cancelar</button>
-          <button onclick="aplicarCambios()" class="btn-primary" style="font-size:11px;">
-            <i data-lucide="check" style="width:12px;height:12px;"></i> Aplicar cambios
-          </button>
         </div>
       </div>
     </div>
@@ -185,232 +154,231 @@
 <script src="/socket.io/socket.io.js"></script>
 <script src="/sidebar.js"></script>
 <script>
-const STEPS = ['contacts','html','config','send'];
-const STEP_LABELS = { contacts:'Contactos', html:'HTML', config:'Configurar', send:'Enviar' };
-let currentStep = 'contacts';
-let contactsData = null;  // { tempId, headers, preview, total }
-let htmlData = null;      // { tempId, variables }
-let rawHtml = '';
-let htmlTab = 'upload';
-let templates = [];
+const WEBHOOK = document.getElementById('cfg-webhook').value;
+const STARTER = `<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"></head>
+<body style="margin:0;padding:0;background:#f4f5f4;font-family:Arial,Helvetica,sans-serif;color:#1a1a1a;">
+  <div style="max-width:600px;margin:0 auto;padding:28px 24px;background:#ffffff;">
+    <p style="font-size:15px;">Hola {{nombre}},</p>
+    <p style="font-size:15px;line-height:1.6;">Escribe aquí tu mensaje…</p>
+    <p style="font-size:15px;">Saludos,<br>Equipo Karri</p>
+  </div>
+</body>
+</html>`;
+
+let mode = 'visual';
+let rawHtml = STARTER;
+let docSkeleton = null;      // Document parseado (para reconstruir el HTML completo desde el visual)
+let contactsData = null;     // { tempId, headers, preview, total }
+let variablesDisponibles = ['nombre', 'correo'];
 let sending = false;
 
-function renderSteps() {
-  const idx = STEPS.indexOf(currentStep);
-  document.getElementById('stepsBar').innerHTML = STEPS.map((s, i) => {
-    const cls = s === currentStep ? 'step-active' : i < idx ? 'step-done' : 'step-pending';
-    const action = i < idx ? `onclick="goStep('${s}')"` : '';
-    return `<span class="step-pill ${cls}" ${action}>${i+1}. ${STEP_LABELS[s]}</span>`;
-  }).join('<i data-lucide="chevron-right" style="width:12px;height:12px;color:rgba(15,23,22,.2);flex-shrink:0;"></i>');
-  lucide.createIcons();
+function icons() { if (window.lucide) lucide.createIcons(); }
+
+// ── Editor: modo Visual / HTML / Vista previa ──────────────────────────────
+function commit() {
+  if (mode === 'visual') rawHtml = visualToHtml();
+  else if (mode === 'code') rawHtml = document.getElementById('edCode').value;
+}
+function visualToHtml() {
+  const body = document.getElementById('edVisual').innerHTML;
+  if (docSkeleton && docSkeleton.body) {
+    docSkeleton.body.innerHTML = body;
+    return '<!DOCTYPE html>\n' + docSkeleton.documentElement.outerHTML;
+  }
+  return body;
+}
+function htmlToVisual(html) {
+  docSkeleton = new DOMParser().parseFromString(html, 'text/html');
+  document.getElementById('edVisual').innerHTML = docSkeleton.body ? docSkeleton.body.innerHTML : html;
+}
+function personalizar(html) {
+  const row = (contactsData && contactsData.preview && contactsData.preview[0]) || {};
+  return html.replace(/\{\{([^}]+)\}\}/g, (m, k) => {
+    const key = k.trim();
+    const v = row[key] != null && row[key] !== '' ? row[key] : null;
+    return v != null ? String(v) : '[' + key + ']';
+  });
 }
 
-function goStep(s) {
-  document.getElementById(`step-${currentStep}`).classList.add('hidden');
-  currentStep = s;
-  document.getElementById(`step-${currentStep}`).classList.remove('hidden');
-  if (s === 'send') fillSummary();
-  if (s === 'html' && htmlTab === 'library') loadLibrary();
-  renderSteps();
+// Muestra un modo cargando rawHtml en su widget. NO hace commit (se usa al
+// iniciar y al cargar plantilla, cuando el widget actual puede estar vacío y
+// no debe pisar rawHtml).
+function mostrar(to) {
+  mode = to;
+  document.querySelectorAll('.ed-tab').forEach(b => b.classList.toggle('active', b.dataset.m === to));
+  document.getElementById('vToolbar').style.display = to === 'visual' ? 'flex' : 'none';
+  document.getElementById('edVisual').style.display  = to === 'visual'  ? 'block' : 'none';
+  document.getElementById('edCode').style.display    = to === 'code'    ? 'block' : 'none';
+  document.getElementById('edPreview').style.display = to === 'preview' ? 'block' : 'none';
+  if (to === 'visual') { htmlToVisual(rawHtml); try { document.execCommand('styleWithCSS', false, true); } catch (e) {} }
+  else if (to === 'code') document.getElementById('edCode').value = rawHtml;
+  else if (to === 'preview') document.getElementById('edPreview').srcdoc = personalizar(rawHtml);
+  icons();
+}
+// Cambio de pestaña por el usuario: captura lo editado y luego muestra el nuevo modo.
+function setMode(to) { commit(); mostrar(to); }
+function onVisualInput() { rawHtml = visualToHtml(); }
+function onCodeInput() { rawHtml = document.getElementById('edCode').value; }
+
+// ── Barra de formato (execCommand; mantiene el foco en el editor) ───────────
+function focoEditor() { document.getElementById('edVisual').focus(); }
+function cmd(e, c) { e.preventDefault(); focoEditor(); document.execCommand(c, false, null); onVisualInput(); }
+function bloque(e, tag) { e.preventDefault(); focoEditor(); document.execCommand('formatBlock', false, tag); onVisualInput(); }
+function color(e, val) { focoEditor(); try { document.execCommand('styleWithCSS', false, true); } catch (x) {} document.execCommand('foreColor', false, val); onVisualInput(); }
+function enlace(e) { e.preventDefault(); focoEditor(); const url = prompt('URL del enlace:', 'https://'); if (url) document.execCommand('createLink', false, url); onVisualInput(); }
+function imagen(e) { e.preventDefault(); focoEditor(); const url = prompt('URL de la imagen:', 'https://'); if (url) document.execCommand('insertImage', false, url); onVisualInput(); }
+
+function insertVar(v) {
+  if (!v) return;
+  const token = '{{' + v + '}}';
+  if (mode === 'visual') { focoEditor(); document.execCommand('insertText', false, token); onVisualInput(); }
+  else if (mode === 'code') {
+    const ta = document.getElementById('edCode');
+    const s = ta.selectionStart, e = ta.selectionEnd;
+    ta.value = ta.value.slice(0, s) + token + ta.value.slice(e);
+    ta.selectionStart = ta.selectionEnd = s + token.length; ta.focus();
+    onCodeInput();
+  } else { alert('Cambia a Visual o HTML para insertar la variable.'); }
 }
 
-// Drag & drop helpers
-function ev(e, type, action) {
+// ── Contactos ───────────────────────────────────────────────────────────────
+function ev(e, action) {
   e.preventDefault();
-  const el = document.getElementById(`drop-${type}`);
+  const el = document.getElementById('drop-contacts');
   if (action === 'over') el.classList.add('drag');
   else if (action === 'leave') el.classList.remove('drag');
-  else { el.classList.remove('drag'); if (e.dataTransfer.files[0]) type === 'contacts' ? handleContacts(e.dataTransfer.files[0]) : handleHtml(e.dataTransfer.files[0]); }
+  else { el.classList.remove('drag'); if (e.dataTransfer.files[0]) handleContacts(e.dataTransfer.files[0]); }
 }
-
 async function handleContacts(file) {
   if (!file) return;
   const fd = new FormData(); fd.append('file', file);
   try {
-    const r = await fetch('/api/ob/email/parse-contacts', { method:'POST', body:fd }).then(x => x.json());
+    const r = await fetch('/api/ob/email/parse-contacts', { method: 'POST', body: fd }).then(x => x.json());
     if (r.error) throw new Error(r.error);
     contactsData = r;
+    variablesDisponibles = Array.from(new Set([...(r.headers || []), 'nombre', 'correo']));
     document.getElementById('contacts-info').classList.remove('hidden');
     document.getElementById('contacts-name').textContent = file.name;
-    document.getElementById('contacts-count').textContent = `${r.total} contactos · Columnas: ${r.headers.join(', ')}`;
-    document.getElementById('btn-contacts-next').disabled = false;
+    document.getElementById('contacts-count').textContent = `${r.total} contactos · columnas: ${r.headers.join(', ')}`;
+    document.getElementById('contacts-vars').innerHTML =
+      '<p class="mini" style="margin-bottom:3px;">Variables (clic para copiar):</p>' +
+      (r.headers || []).map(h => `<span class="var-chip" onclick="copiarVar('${h}')">{{${h}}}</span>`).join('');
+    poblarVariables();
+    actualizarEstadoEnvio();
+    icons();
   } catch (e) { alert('Error: ' + e.message); }
 }
+function copiarVar(h) { navigator.clipboard && navigator.clipboard.writeText('{{' + h + '}}'); }
+function poblarVariables() {
+  const sel = document.getElementById('varSelect');
+  sel.innerHTML = '<option value="">Insertar variable…</option>' +
+    variablesDisponibles.map(v => `<option value="${v}">{{${v}}}</option>`).join('');
+}
 
-async function handleHtml(file) {
-  if (!file) return;
-  rawHtml = await file.text();
-  const fd = new FormData(); fd.append('file', file);
+// ── Plantillas ──────────────────────────────────────────────────────────────
+async function cargarPlantillas() {
   try {
-    const r = await fetch('/api/ob/email/parse-html', { method:'POST', body:fd }).then(x => x.json());
-    if (r.error) throw new Error(r.error);
-    htmlData = r;
-    document.getElementById('html-info').classList.remove('hidden');
-    document.getElementById('html-name').textContent  = file.name;
-    document.getElementById('html-vars').textContent  = `Variables: ${r.variables.join(', ') || 'ninguna'}`;
-    document.getElementById('btn-html-next').disabled = false;
-    document.getElementById('tpl-saved-msg').classList.add('hidden');
-  } catch (e) { alert('Error: ' + e.message); }
+    const tpls = await fetch('/api/ob/templates').then(r => r.json());
+    const sel = document.getElementById('tplSelect');
+    sel.innerHTML = '<option value="">Plantillas…</option>' +
+      tpls.map(t => `<option value="${t.id}">${t.name}</option>`).join('');
+  } catch (e) {}
 }
-
-function setHtmlTab(tab) {
-  htmlTab = tab;
-  document.getElementById('html-upload-panel').classList.toggle('hidden', tab !== 'upload');
-  document.getElementById('html-library-panel').classList.toggle('hidden', tab !== 'library');
-  document.getElementById('tab-upload').style.background  = tab === 'upload'  ? 'rgba(5,150,105,.1)' : '';
-  document.getElementById('tab-library').style.background = tab === 'library' ? 'rgba(5,150,105,.1)' : '';
-  if (tab === 'library') loadLibrary();
+async function usarPlantilla(id) {
+  if (!id) return;
+  try {
+    const tpl = await fetch('/api/ob/templates/' + id).then(r => r.json());
+    if (tpl && tpl.html) { rawHtml = tpl.html; mostrar(mode); }
+  } catch (e) { alert('No se pudo cargar la plantilla'); }
+  document.getElementById('tplSelect').value = '';
 }
-
-async function loadLibrary() {
-  templates = await fetch('/api/ob/templates').then(r => r.json());
-  const el = document.getElementById('tpl-list');
-  if (!templates.length) { el.innerHTML = '<p style="color:rgba(15,23,22,.3);font-size:12px;text-align:center;padding:20px;">Sin plantillas guardadas</p>'; return; }
-  el.innerHTML = templates.map(t => `
-    <div style="display:flex;align-items:center;gap:10px;padding:10px;background:#ffffff;border-radius:8px;border:1px solid rgba(15,23,22,.06);">
-      <span style="flex:1;font-size:12px;color:#12181a;">${t.name}</span>
-      <span style="font-size:10px;color:rgba(15,23,22,.4);">${new Date(t.createdAt).toLocaleDateString('es')}</span>
-      <button onclick="selectTpl('${t.id}')" class="btn-primary" style="padding:3px 10px;font-size:10px;">Usar</button>
-      <button onclick="deleteTpl('${t.id}')" style="background:transparent;border:none;color:#dc2626;cursor:pointer;font-size:14px;">×</button>
-    </div>`).join('');
-}
-
-async function selectTpl(id) {
-  const tpl = await fetch(`/api/ob/templates/${id}`).then(r => r.json());
-  rawHtml = tpl.html;
-  const r = await fetch('/api/ob/email/parse-html', { method:'POST', body: (() => { const fd = new FormData(); fd.append('file', new File([tpl.html], 'tpl.html', {type:'text/html'})); return fd; })() }).then(x => x.json());
-  htmlData = r;
-  document.getElementById('btn-html-next').disabled = false;
-  document.getElementById('html-info').classList.remove('hidden');
-  document.getElementById('html-name').textContent = tpl.name;
-  document.getElementById('html-vars').textContent = `Variables: ${r.variables?.join(', ') || 'ninguna'}`;
-  setHtmlTab('upload');
-}
-
-async function deleteTpl(id) {
-  await fetch(`/api/ob/templates/${id}`, { method:'DELETE' });
-  loadLibrary();
-}
-
 async function guardarPlantilla() {
-  const name = document.getElementById('tpl-name').value.trim();
-  if (!name || !rawHtml) return;
-  await fetch('/api/ob/templates', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ name, html: rawHtml }) });
-  document.getElementById('tpl-saved-msg').classList.remove('hidden');
-  document.getElementById('tpl-name').value = '';
+  commit();
+  const name = prompt('Nombre de la plantilla:');
+  if (!name) return;
+  try {
+    await fetch('/api/ob/templates', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: name.trim(), html: rawHtml }) });
+    await cargarPlantillas();
+    alert('Plantilla guardada ✓');
+  } catch (e) { alert('No se pudo guardar'); }
 }
 
-function fillSummary() {
-  document.getElementById('sum-name').textContent    = document.getElementById('cfg-name').value || '—';
-  document.getElementById('sum-count').textContent   = `${contactsData?.total || 0} contactos`;
-  document.getElementById('sum-subject').textContent = document.getElementById('cfg-subject').value || '—';
-  document.getElementById('sum-vars').textContent    = htmlData?.variables?.join(', ') || 'ninguna';
+// ── Enviar ──────────────────────────────────────────────────────────────────
+function actualizarEstadoEnvio() {
+  const ok = !!(contactsData && contactsData.total && document.getElementById('cfg-subject').value.trim() && rawHtml.trim());
+  document.getElementById('send-hint').style.display = ok ? 'none' : '';
+  return ok;
 }
-
 async function enviar() {
   if (sending) return;
+  commit();
+  if (!contactsData || !contactsData.total) return alert('Primero sube la lista de contactos.');
+  if (!document.getElementById('cfg-subject').value.trim()) return alert('Falta el asunto del correo.');
+  if (!document.getElementById('cfg-name').value.trim()) return alert('Ponle un nombre a la campaña.');
+  if (!rawHtml.trim()) return alert('El correo está vacío.');
+
   sending = true;
-  document.getElementById('btn-send').disabled = true;
-  document.getElementById('send-progress').classList.remove('hidden');
+  const btn = document.getElementById('btn-send'); btn.disabled = true;
   document.getElementById('send-error').classList.add('hidden');
   document.getElementById('send-done').classList.add('hidden');
-
-  const body = {
-    contactsTempId: contactsData.tempId,
-    htmlTempId:     htmlData.tempId,
-    name:           document.getElementById('cfg-name').value,
-    subject:        document.getElementById('cfg-subject').value,
-    fromName:       document.getElementById('cfg-fromName').value,
-    fromEmail:      document.getElementById('cfg-fromEmail').value,
-    webhookUrl:     document.getElementById('cfg-webhook').value,
-  };
+  document.getElementById('send-progress').classList.remove('hidden');
+  document.getElementById('send-status').textContent = 'Preparando envío…';
+  document.getElementById('send-bar').style.width = '30%';
 
   try {
-    const r = await fetch('/api/ob/email/send', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) }).then(x => x.json());
+    // Registrar el HTML actual en el servidor → htmlTempId
+    const fd = new FormData();
+    fd.append('file', new File([rawHtml], 'correo.html', { type: 'text/html' }));
+    const ph = await fetch('/api/ob/email/parse-html', { method: 'POST', body: fd }).then(x => x.json());
+    if (ph.error) throw new Error(ph.error);
+
+    const body = {
+      contactsTempId: contactsData.tempId,
+      htmlTempId:     ph.tempId,
+      name:           document.getElementById('cfg-name').value,
+      subject:        document.getElementById('cfg-subject').value,
+      fromName:       document.getElementById('cfg-fromName').value,
+      fromEmail:      document.getElementById('cfg-fromEmail').value,
+      webhookUrl:     WEBHOOK,
+    };
+    const r = await fetch('/api/ob/email/send', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(x => x.json());
     if (r.error) throw new Error(r.error);
-    document.getElementById('send-status').textContent = `Enviando ${r.total} correos via webhook...`;
+    document.getElementById('send-status').textContent = `Enviando ${r.total} correos…`;
     document.getElementById('send-bar').style.width = '80%';
-    // El resultado real llega por Socket.io (campaign:complete o campaign:error)
+    // El resultado final llega por Socket.io (campaign:complete / campaign:error)
   } catch (e) {
     document.getElementById('send-progress').classList.add('hidden');
     document.getElementById('send-error').classList.remove('hidden');
     document.getElementById('send-error').textContent = 'Error: ' + e.message;
-    document.getElementById('btn-send').disabled = false;
-    sending = false;
+    btn.disabled = false; sending = false;
   }
 }
 
-// ─── Editor / Preview ─────────────────────────────────────────
-function abrirEditor() {
-  if (!rawHtml) return;
-  document.getElementById('html-iframe').srcdoc = rawHtml;
-  document.getElementById('modal-editor').classList.remove('hidden');
-  setViewTabEditor('preview');
-}
-
-function cerrarEditor() {
-  document.getElementById('modal-editor').classList.add('hidden');
-}
-
-function setViewTabEditor(tab) {
-  document.getElementById('epanel-preview').style.display = tab === 'preview' ? 'flex' : 'none';
-  document.getElementById('epanel-code').style.display    = tab === 'code'    ? 'flex' : 'none';
-  document.getElementById('etab-preview').style.background = tab === 'preview' ? 'rgba(5,150,105,.1)' : '';
-  document.getElementById('etab-code').style.background    = tab === 'code'    ? 'rgba(5,150,105,.1)' : '';
-  document.getElementById('etab-preview').style.color = tab === 'preview' ? '#78fcd6' : '';
-  document.getElementById('etab-code').style.color    = tab === 'code'    ? '#78fcd6' : '';
-  if (tab === 'code') {
-    document.getElementById('html-editor').value = rawHtml;
-    const vars = [...new Set([...rawHtml.matchAll(/\{\{([^}]+)\}\}/g)].map(m => m[1].trim()))];
-    document.getElementById('editor-vars-hint').textContent = vars.length ? `Variables: ${vars.join(', ')}` : '';
-  }
-  lucide.createIcons();
-}
-
-async function aplicarCambios() {
-  rawHtml = document.getElementById('html-editor').value;
-  // Re-subir al servidor para actualizar tempId con el HTML editado
-  const fd = new FormData();
-  fd.append('file', new File([rawHtml], 'edited.html', { type: 'text/html' }));
-  try {
-    const r = await fetch('/api/ob/email/parse-html', { method: 'POST', body: fd }).then(x => x.json());
-    if (r.error) throw new Error(r.error);
-    htmlData = r;
-  } catch {
-    // Si falla el re-upload, mantener el tempId anterior y actualizar variables localmente
-    const vars = [...new Set([...rawHtml.matchAll(/\{\{([^}]+)\}\}/g)].map(m => m[1].trim()))];
-    if (htmlData) htmlData.variables = vars;
-    else htmlData = { tempId: null, variables: vars };
-  }
-  document.getElementById('html-vars').textContent = `Variables: ${htmlData?.variables?.join(', ') || 'ninguna'}`;
-  document.getElementById('btn-html-next').disabled = false;
-  document.getElementById('html-info').classList.remove('hidden');
-  document.getElementById('html-iframe').srcdoc = rawHtml;
-  setViewTabEditor('preview');
-}
-
-// Cerrar modal con Escape
-document.addEventListener('keydown', e => {
-  if (e.key === 'Escape') cerrarEditor();
-});
-
-// Escuchar errores del webhook via Socket.io
 const socket = io();
 socket.on('campaign:error', ({ error }) => {
   document.getElementById('send-progress').classList.add('hidden');
   document.getElementById('send-done').classList.add('hidden');
   document.getElementById('send-error').classList.remove('hidden');
   document.getElementById('send-error').textContent = 'Error del servidor de correo: ' + error;
-  document.getElementById('btn-send').disabled = false;
-  sending = false;
+  document.getElementById('btn-send').disabled = false; sending = false;
 });
 socket.on('campaign:complete', ({ stats }) => {
   document.getElementById('send-progress').classList.add('hidden');
   document.getElementById('send-done').classList.remove('hidden');
   document.getElementById('send-result').textContent = `${stats.sent} enviados · ${stats.failed} fallidos`;
+  document.getElementById('btn-send').disabled = false; sending = false;
 });
 
-initSidebar('ob-email').then(() => { lucide.createIcons(); renderSteps(); });
+['cfg-subject', 'cfg-name'].forEach(id => document.getElementById(id).addEventListener('input', actualizarEstadoEnvio));
+
+initSidebar('ob-email').then(() => {
+  mostrar('visual');
+  poblarVariables();
+  cargarPlantillas();
+  icons();
+});
 </script>
 </body>
 </html>
