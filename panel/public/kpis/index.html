@@ -31,6 +31,13 @@
   .mini { font-size:11px; color:var(--text-muted); }
   .banner { border:1px solid var(--border); border-radius:12px; padding:12px 16px; display:flex; align-items:center; gap:14px; flex-wrap:wrap; background:var(--bg-800); }
   .banner.warn { border-color:rgba(180,83,9,.4); background:rgba(180,83,9,.06); }
+  .filters { display:flex; align-items:flex-end; gap:12px; flex-wrap:wrap; background:var(--bg-800); border:1px solid var(--border); border-radius:12px; padding:12px 16px; }
+  .fgroup { display:flex; flex-direction:column; gap:4px; }
+  .fgroup > label { font-size:10px; text-transform:uppercase; letter-spacing:.04em; color:var(--text-muted); font-weight:600; }
+  .fgroup select, .fgroup input[type=date] { padding:7px 10px; }
+  .dl-btn { border:1px solid var(--border); background:var(--bg-800); color:var(--text-muted); cursor:pointer; border-radius:8px; padding:5px 10px; font-size:11.5px; font-weight:600; display:inline-flex; align-items:center; gap:5px; }
+  .dl-btn:hover { background:var(--bg-600); color:var(--text); }
+  .sec-head { display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; margin-bottom:8px; }
 </style>
 <link rel="stylesheet" href="/assets/tailwind.css"></head>
 <body>
@@ -60,9 +67,45 @@
         <span class="mini">Cargando…</span>
       </div>
 
+      <!-- Filtros -->
+      <div class="filters">
+        <div class="fgroup">
+          <label>Tiempo</label>
+          <select id="fTiempo" class="input" style="width:auto;" onchange="onTiempoChange()">
+            <option value="">Todo</option>
+            <option value="7">Últimos 7 días</option>
+            <option value="30">Últimos 30 días</option>
+            <option value="90">Últimos 90 días</option>
+            <option value="mes">Este mes</option>
+            <option value="mespasado">Mes pasado</option>
+            <option value="custom">Personalizado…</option>
+          </select>
+        </div>
+        <div class="fgroup" id="grpDesde" style="display:none;">
+          <label>Desde</label>
+          <input type="date" id="fDesde" class="input" onchange="aplicarFiltros()">
+        </div>
+        <div class="fgroup" id="grpHasta" style="display:none;">
+          <label>Hasta</label>
+          <input type="date" id="fHasta" class="input" onchange="aplicarFiltros()">
+        </div>
+        <div class="fgroup">
+          <label>Tienda</label>
+          <select id="fTienda" class="input" style="width:auto;max-width:220px;" onchange="aplicarFiltros()"><option value="">Todas</option></select>
+        </div>
+        <div class="fgroup">
+          <label>Rol</label>
+          <select id="fRol" class="input" style="width:auto;" onchange="aplicarFiltros()"><option value="">Todos</option></select>
+        </div>
+        <button class="btn-secondary" onclick="limpiarFiltros()" style="margin-left:auto;"><i data-lucide="x" class="w-3.5 h-3.5"></i> Limpiar</button>
+      </div>
+
       <!-- 1) Embudo de leads -->
       <div>
-        <p class="label mb-2" style="text-transform:uppercase;">Embudo de leads (clientes con producción cargada)</p>
+        <div class="sec-head">
+          <p class="label" style="text-transform:uppercase;">Embudo de leads (clientes con producción cargada)</p>
+          <button class="dl-btn" onclick="descargarEmbudo()"><i data-lucide="download" style="width:13px;height:13px;"></i> Descargar detalle</button>
+        </div>
         <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div class="card">
             <p class="label mb-2">Altas en alcance</p>
@@ -94,9 +137,12 @@
 
       <!-- 3) Días hasta 1er pedido -->
       <div class="card">
-        <div class="flex items-center justify-between mb-3">
+        <div class="flex items-center justify-between mb-3 gap-2 flex-wrap">
           <p class="label" style="text-transform:uppercase;">Días desde el alta hasta el 1er pedido</p>
-          <p class="mini" id="diasN">—</p>
+          <div class="flex items-center gap-3">
+            <p class="mini" id="diasN">—</p>
+            <button class="dl-btn" onclick="descargarDias()"><i data-lucide="download" style="width:13px;height:13px;"></i> Descargar detalle</button>
+          </div>
         </div>
         <div class="grid md:grid-cols-3 gap-5 items-center">
           <div class="flex gap-8">
@@ -117,10 +163,13 @@
       <div class="card">
         <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
           <p class="label" style="text-transform:uppercase;">Cortes: dónde se activan o estancan los leads</p>
-          <div class="filter-tabs" id="corteTabs">
-            <button class="ftab active" data-corte="porCliente" onclick="setCorte('porCliente')">Por cliente</button>
-            <button class="ftab" data-corte="porRol" onclick="setCorte('porRol')">Por rol</button>
-            <button class="ftab" data-corte="porTienda" onclick="setCorte('porTienda')">Por tienda/sala</button>
+          <div class="flex items-center gap-2 flex-wrap">
+            <div class="filter-tabs" id="corteTabs">
+              <button class="ftab active" data-corte="porCliente" onclick="setCorte('porCliente')">Por cliente</button>
+              <button class="ftab" data-corte="porRol" onclick="setCorte('porRol')">Por rol</button>
+              <button class="ftab" data-corte="porTienda" onclick="setCorte('porTienda')">Por tienda/sala</button>
+            </div>
+            <button class="dl-btn" onclick="descargarCorte()"><i data-lucide="download" style="width:13px;height:13px;"></i> Descargar</button>
           </div>
         </div>
         <div class="tbl-wrap" style="max-height:420px;">
@@ -151,8 +200,9 @@
             </select>
             <div class="relative">
               <i data-lucide="search" style="position:absolute;left:10px;top:50%;transform:translateY(-50%);width:13px;height:13px;color:var(--text-faint);"></i>
-              <input id="fBusca" class="input" style="padding-left:30px;width:220px;" placeholder="Buscar nombre, rut, patente…" oninput="renderOperadores()">
+              <input id="fBusca" class="input" style="padding-left:30px;width:220px;" placeholder="Buscar nombre, rut…" oninput="renderOperadores()">
             </div>
+            <button class="dl-btn" onclick="descargarMatriz()"><i data-lucide="download" style="width:13px;height:13px;"></i> Descargar detalle</button>
           </div>
         </div>
         <div class="tbl-wrap">
@@ -161,9 +211,11 @@
               <th>Operador</th>
               <th>Cliente</th>
               <th>Rol</th>
+              <th>Tienda</th>
               <th>Alta</th>
               <th>Estado</th>
               <th class="num">Pedidos</th>
+              <th class="num">Días con prod.</th>
               <th class="num">Monto</th>
               <th>Última activa</th>
               <th class="num">Días a 1er</th>
@@ -194,15 +246,129 @@ const cssVar = n => getComputedStyle(document.documentElement).getPropertyValue(
 
 function icons() { if (window.lucide) lucide.createIcons(); }
 
+let opcionesPobladas = false;
+
 async function cargar() {
   try {
-    const r = await fetch('/api/kpis/dashboard');
+    const r = await fetch('/api/kpis/dashboard?' + queryActual());
     DATA = await r.json();
+    poblarOpciones();
     render();
   } catch (e) {
     document.getElementById('banner').className = 'banner warn';
     document.getElementById('banner').innerHTML = '<span class="mini">Error cargando el tablero: ' + esc(e.message) + '</span>';
   }
+}
+
+// ── Filtros (Tiempo / Tienda / Rol) ─────────────────────────────────────────
+function poblarOpciones() {
+  if (opcionesPobladas || !DATA || !DATA.opciones) return;
+  const selT = document.getElementById('fTienda');
+  for (const t of DATA.opciones.tiendas || []) { const o = document.createElement('option'); o.value = t; o.textContent = t; selT.appendChild(o); }
+  const selR = document.getElementById('fRol');
+  for (const r of DATA.opciones.roles || []) { const o = document.createElement('option'); o.value = r; o.textContent = r; selR.appendChild(o); }
+  const rg = DATA.opciones.rango || {};
+  ['fDesde', 'fHasta'].forEach(id => { const el = document.getElementById(id); if (rg.desde) el.min = rg.desde; if (rg.hasta) el.max = rg.hasta; });
+  opcionesPobladas = true;
+}
+
+function rangoDeTiempo() {
+  const modo = document.getElementById('fTiempo').value;
+  if (modo === 'custom') return { desde: document.getElementById('fDesde').value || '', hasta: document.getElementById('fHasta').value || '' };
+  if (!modo) return { desde: '', hasta: '' };
+  const rg = (DATA && DATA.opciones && DATA.opciones.rango) || {};
+  const fin = rg.hasta || new Date().toISOString().slice(0, 10);
+  const finD = new Date(fin + 'T00:00:00Z');
+  const iso = d => d.toISOString().slice(0, 10);
+  if (modo === 'mes') return { desde: iso(new Date(Date.UTC(finD.getUTCFullYear(), finD.getUTCMonth(), 1))), hasta: fin };
+  if (modo === 'mespasado') {
+    const first = new Date(Date.UTC(finD.getUTCFullYear(), finD.getUTCMonth() - 1, 1));
+    const last  = new Date(Date.UTC(finD.getUTCFullYear(), finD.getUTCMonth(), 0));
+    return { desde: iso(first), hasta: iso(last) };
+  }
+  const n = parseInt(modo, 10) || 0;
+  const d = new Date(finD); d.setUTCDate(d.getUTCDate() - (n - 1));
+  return { desde: iso(d), hasta: fin };
+}
+
+function queryActual() {
+  const p = new URLSearchParams();
+  const { desde, hasta } = rangoDeTiempo();
+  if (desde) p.set('desde', desde);
+  if (hasta) p.set('hasta', hasta);
+  const t = document.getElementById('fTienda').value; if (t) p.set('tienda', t);
+  const r = document.getElementById('fRol').value; if (r) p.set('rol', r);
+  return p.toString();
+}
+
+function onTiempoChange() {
+  const custom = document.getElementById('fTiempo').value === 'custom';
+  document.getElementById('grpDesde').style.display = custom ? '' : 'none';
+  document.getElementById('grpHasta').style.display = custom ? '' : 'none';
+  if (custom) {
+    const rg = (DATA && DATA.opciones && DATA.opciones.rango) || {};
+    const dD = document.getElementById('fDesde'), dH = document.getElementById('fHasta');
+    if (!dD.value && rg.desde) dD.value = rg.desde;
+    if (!dH.value && rg.hasta) dH.value = rg.hasta;
+  }
+  aplicarFiltros();
+}
+function aplicarFiltros() { cargar(); }
+function limpiarFiltros() {
+  document.getElementById('fTiempo').value = '';
+  document.getElementById('fTienda').value = '';
+  document.getElementById('fRol').value = '';
+  document.getElementById('grpDesde').style.display = 'none';
+  document.getElementById('grpHasta').style.display = 'none';
+  aplicarFiltros();
+}
+
+// ── Descargas (CSV con detalle; separador ';' para Excel es-CL) ──────────────
+const ESTADO_TXT = { produciendo: 'Produciendo', sin_produccion: 'Sin producción', otro_cliente: 'Otro cliente' };
+function toCSV(headers, rows) {
+  const c = v => { const s = String(v == null ? '' : v); return /[";\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+  return '﻿' + [headers, ...rows].map(r => r.map(c).join(';')).join('\r\n');
+}
+function descargar(nombre, headers, rows) {
+  const blob = new Blob([toCSV(headers, rows)], { type: 'text/csv;charset=utf-8' });
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+  a.download = nombre; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(a.href);
+}
+function sufijoFiltro() {
+  const f = (DATA && DATA.filtros) || {};
+  let s = '';
+  if (f.desde || f.hasta) s += '_' + (f.desde || 'ini') + '_a_' + (f.hasta || 'fin');
+  if (f.tienda) s += '_' + f.tienda.replace(/[^\w]+/g, '-');
+  if (f.rol) s += '_' + f.rol;
+  return s;
+}
+function descargarEmbudo() {
+  if (!DATA || !DATA.ok) return;
+  const h = ['Nombre', 'RUT', 'Cliente', 'Rol', 'Tienda', 'Fecha alta', 'Estado producción', 'Pedidos', 'Monto', 'Primera producción', 'Días a 1er pedido'];
+  const rows = (DATA.operadores || []).filter(o => o.enAlcance)
+    .map(o => [o.nombre, o.rut, o.cliente, o.rol, o.tienda, o.fechaAlta, ESTADO_TXT[o.estadoProd] || o.estadoProd, o.pedidos, o.montoTotal, o.primeraFecha || '', o.diasHasta1er == null ? '' : o.diasHasta1er]);
+  descargar('embudo_leads' + sufijoFiltro() + '.csv', h, rows);
+}
+function descargarDias() {
+  if (!DATA || !DATA.ok) return;
+  const h = ['Nombre', 'RUT', 'Cliente', 'Rol', 'Tienda', 'Fecha alta', 'Primera producción', 'Días hasta 1er pedido'];
+  const rows = (DATA.operadores || []).filter(o => o.estadoProd === 'produciendo' && o.enAlcance && o.diasHasta1er != null)
+    .map(o => [o.nombre, o.rut, o.cliente, o.rol, o.tienda, o.fechaAlta, o.primeraFecha || '', o.diasHasta1er]);
+  descargar('dias_1er_pedido' + sufijoFiltro() + '.csv', h, rows);
+}
+function descargarCorte() {
+  if (!DATA || !DATA.ok) return;
+  const nombre = CORTE === 'porRol' ? 'rol' : CORTE === 'porTienda' ? 'tienda-sala' : 'cliente';
+  const colLabel = CORTE === 'porRol' ? 'Rol' : CORTE === 'porTienda' ? 'Tienda/Sala' : 'Cliente';
+  const h = [colLabel, 'Altas', 'Produciendo', 'Activación %', 'Pedidos', 'Monto producido'];
+  const rows = (DATA.cortes[CORTE] || []).map(r => [r.label, r.altas, r.produciendo, (r.tasa * 100).toFixed(1), r.pedidos, r.monto]);
+  descargar('corte_' + nombre + sufijoFiltro() + '.csv', h, rows);
+}
+function descargarMatriz() {
+  if (!DATA || !DATA.ok) return;
+  const h = ['Nombre', 'RUT', 'Cliente', 'Rol', 'Tienda', 'Fecha alta', 'Estado producción', 'Pedidos', 'Días con producción', 'Monto', 'Primera producción', 'Última activa', 'Días a 1er'];
+  const rows = operadoresFiltrados().map(o => [o.nombre, o.rut, o.cliente, o.rol, o.tienda, o.fechaAlta, ESTADO_TXT[o.estadoProd] || o.estadoProd, o.pedidos, o.diasConProduccion, o.montoTotal, o.primeraFecha || '', o.ultimaFecha || '', o.diasHasta1er == null ? '' : o.diasHasta1er]);
+  descargar('produccion_por_operador' + sufijoFiltro() + '.csv', h, rows);
 }
 
 function renderBanner() {
@@ -226,6 +392,12 @@ function renderBanner() {
     '<div><div style="font-size:12.5px;font-weight:600;">' + esc(p.fuente || 'EDP') + '</div>' +
     '<div class="mini">' + fmtNum(p.filas) + ' filas · rango ' + esc(rango) + ' · clientes: ' + (clientes || '—') + '</div></div>' +
     '<div class="mini" style="margin-left:auto;text-align:right;">Actualizado<br><b>' + esc(act) + '</b></div>';
+  const ff = DATA.filtros || {};
+  const activos = [];
+  if (ff.desde || ff.hasta) activos.push('Período ' + (ff.desde || '…') + ' → ' + (ff.hasta || '…'));
+  if (ff.tienda) activos.push('Tienda: ' + ff.tienda);
+  if (ff.rol) activos.push('Rol: ' + ff.rol);
+  if (activos.length) b.innerHTML += '<div class="mini" style="flex-basis:100%;color:var(--electric-text);"><b>Filtro activo:</b> ' + esc(activos.join('  ·  ')) + '</div>';
   icons();
 }
 
@@ -234,7 +406,7 @@ function render() {
   if (!DATA || !DATA.ok) {
     ['kAltas','kProd','kSin','kTasa','kFuera','kSinAlta','diasProm','diasMed'].forEach(id => document.getElementById(id).textContent = '—');
     document.getElementById('corteBody').innerHTML = '<tr><td colspan="6" style="text-align:center;padding:30px;color:var(--text-faint);">Sin producción cargada</td></tr>';
-    document.getElementById('opBody').innerHTML = '<tr><td colspan="9" style="text-align:center;padding:30px;color:var(--text-faint);">Sin producción cargada</td></tr>';
+    document.getElementById('opBody').innerHTML = '<tr><td colspan="11" style="text-align:center;padding:30px;color:var(--text-faint);">Sin producción cargada</td></tr>';
     return;
   }
   const f = DATA.funnel;
@@ -302,18 +474,22 @@ const ESTADO_PILL = {
   otro_cliente:   '<span class="pill pill-mute">Otro cliente</span>',
 };
 
-function renderOperadores() {
+function operadoresFiltrados() {
   const q = (document.getElementById('fBusca').value || '').trim().toLowerCase();
   const est = document.getElementById('fEstado').value;
-  let ops = DATA.operadores || [];
+  let ops = (DATA && DATA.operadores) || [];
   if (est) ops = ops.filter(o => o.estadoProd === est);
   if (q) ops = ops.filter(o =>
     (o.nombre && o.nombre.toLowerCase().includes(q)) ||
     (o.rut && o.rut.toLowerCase().includes(q)) ||
+    (o.tienda && o.tienda.toLowerCase().includes(q)) ||
     (o.cliente && o.cliente.toLowerCase().includes(q)));
-
   // Produciendo primero, luego por pedidos desc
-  ops = ops.slice().sort((a, b) => (b.pedidos - a.pedidos) || a.nombre.localeCompare(b.nombre));
+  return ops.slice().sort((a, b) => (b.pedidos - a.pedidos) || a.nombre.localeCompare(b.nombre));
+}
+
+function renderOperadores() {
+  const ops = operadoresFiltrados();
   const total = ops.length;
   const LIMIT = 800;
   const shown = ops.slice(0, LIMIT);
@@ -323,17 +499,19 @@ function renderOperadores() {
     '<td><div style="font-weight:600;">' + esc(o.nombre) + '</div><div class="mini">' + esc(o.rut || '') + '</div></td>' +
     '<td>' + esc(o.cliente) + '</td>' +
     '<td>' + esc(o.rol) + '</td>' +
+    '<td>' + esc(o.tienda || '—') + '</td>' +
     '<td>' + esc(o.fechaAlta || '—') + '</td>' +
     '<td>' + (ESTADO_PILL[o.estadoProd] || '') + '</td>' +
     '<td class="num">' + (o.pedidos ? fmtNum(o.pedidos) : '—') + '</td>' +
+    '<td class="num">' + (o.diasConProduccion ? fmtNum(o.diasConProduccion) : '—') + '</td>' +
     '<td class="num">' + fmtMonto(o.montoTotal) + '</td>' +
     '<td>' + esc(o.ultimaFecha || '—') + '</td>' +
     '<td class="num">' + (o.diasHasta1er == null ? '—' : fmtNum(o.diasHasta1er)) + '</td>' +
     '</tr>'
-  ).join('') : '<tr><td colspan="9" style="text-align:center;padding:24px;color:var(--text-faint);">Sin coincidencias</td></tr>';
+  ).join('') : '<tr><td colspan="11" style="text-align:center;padding:24px;color:var(--text-faint);">Sin coincidencias</td></tr>';
 
   document.getElementById('opCount').textContent =
-    'Mostrando ' + fmtNum(shown.length) + (total > LIMIT ? ' de ' + fmtNum(total) + ' (refina la búsqueda para ver más)' : ' de ' + fmtNum(total));
+    'Mostrando ' + fmtNum(shown.length) + (total > LIMIT ? ' de ' + fmtNum(total) + ' (refina la búsqueda o descarga el detalle completo)' : ' de ' + fmtNum(total));
 }
 
 async function refrescarProduccion() {

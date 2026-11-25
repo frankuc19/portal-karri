@@ -3,10 +3,12 @@ const router = express.Router();
 const produccionStore = require('./produccionStore');
 const { construirDashboard } = require('./kpis');
 
-// Tablero completo (altas vs producción), calculado sobre el agregado cacheado.
+// Tablero completo (altas vs producción), recomputado con los filtros de la
+// query: ?desde=YYYY-MM-DD&hasta=YYYY-MM-DD&tienda=...&rol=...
 router.get('/dashboard', (req, res) => {
   try {
-    res.json(construirDashboard());
+    const { desde, hasta, tienda, rol } = req.query;
+    res.json(construirDashboard({ desde, hasta, tienda, rol }));
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message });
   }

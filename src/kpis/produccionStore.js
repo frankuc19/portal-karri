@@ -63,13 +63,15 @@ async function refrescar() {
     const agg = await parsearEnWorker(buffer);
     const data = {
       ok: true,
+      formato: 2,                     // v2: detalle pre-agregado (dims + grano) para filtros
       actualizadoAt: new Date().toISOString(),
       fuente: { id: archivo.id, nombre: archivo.name, modifiedTime: archivo.modifiedTime, bytes: Number(archivo.size) || null },
       hoja: agg.sheetName,
       filas: agg.filas,
       rango: agg.rango,
-      clientes: agg.clientes,
-      operadores: agg.operadores,
+      clientes: agg.clientesStats,
+      dims: agg.dims,
+      grano: agg.grano,
     };
     guardarCache(data);
     return data;
@@ -81,12 +83,14 @@ async function refrescar() {
 // Agregado actual (de memoria/disco). No descarga.
 function getProduccion() { return leerCache(); }
 
-// Estado liviano para la UI (sin el arreglo de operadores).
+// Estado liviano para la UI (sin dims/grano, que son grandes).
 function getEstado() {
   const c = leerCache();
   if (!c) return { ok: false, actualizadoAt: null, mensaje: 'Aún no se ha cargado producción.' };
-  const { operadores, ...resto } = c;
-  return { ...resto, operadores: Array.isArray(operadores) ? operadores.length : 0 };
+  const { dims, grano, operadores, ...resto } = c;
+  const nOps = dims && Array.isArray(dims.operadores) ? dims.operadores.length
+    : (Array.isArray(operadores) ? operadores.length : 0);
+  return { ...resto, operadores: nOps };
 }
 
 function estaRefrescando() { return _refrescando; }
