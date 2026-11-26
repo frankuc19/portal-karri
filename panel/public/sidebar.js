@@ -83,6 +83,13 @@
       ],
     },
     {
+      label: 'Agenda',
+      perm:  'agenda',
+      items: [
+        { label: 'Karri Agenda', href: '/agenda/index.html', icon: 'calendar-check', key: 'agenda-app' },
+      ],
+    },
+    {
       label: 'Perfiles',
       perm:  'perfiles',
       items: [

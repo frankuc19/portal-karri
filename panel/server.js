@@ -143,7 +143,7 @@ function migrateLegacyPwd(pwd) {
 // Para reactivarlo: volver a agregar 'finanzas' acá, restaurar su entrada en
 // SECTION_HOME y PAGE_SECTION, quitar el bloqueo de FINANZAS_DESHABILITADO más
 // abajo, y descomentar la sección "Finanzas" en panel/public/sidebar.js.
-const ALL_SECTIONS = ['onboarding', 'operaciones', 'kpis', 'capacitacion', 'turnos', 'perfiles'];
+const ALL_SECTIONS = ['onboarding', 'operaciones', 'kpis', 'capacitacion', 'turnos', 'agenda', 'perfiles'];
 
 function loginUser(username, password) {
   const users = readUsers();
@@ -377,6 +377,7 @@ const SECTION_HOME = {
   kpis:        '/kpis/index.html',
   capacitacion: '/capacitacion/index.html',
   turnos:      '/turnos/dashboard.html',
+  agenda:      '/agenda/index.html',
   perfiles:    '/perfiles.html',
 };
 
@@ -409,6 +410,7 @@ const PAGE_SECTION = {
   '/turnos/asignaciones.html':         'turnos',
   '/turnos/asistencia.html':           'turnos',
   '/turnos/configuracion.html':        'turnos',
+  '/agenda/index.html':                'agenda',
   '/perfiles.html':                    'perfiles',
 };
 

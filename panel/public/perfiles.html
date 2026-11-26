@@ -160,6 +160,13 @@
               <p style="font-size:11px;color:rgba(15,23,22,.4);">Dashboard, tiendas, planificación y Karriers</p>
             </div>
           </label>
+          <label class="sec-option" id="sec-agenda">
+            <input type="checkbox" value="agenda" onchange="onSecChange(this)">
+            <div>
+              <p style="font-size:13px;font-weight:500;color:#12181a;">Agenda</p>
+              <p style="font-size:11px;color:rgba(15,23,22,.4);">Karri Agenda · reservas, recursos y página pública (prototipo)</p>
+            </div>
+          </label>
           <label class="sec-option" id="sec-perfiles">
             <input type="checkbox" value="perfiles" onchange="onSecChange(this)">
             <div>
@@ -184,7 +191,7 @@
 
 <script src="/sidebar.js"></script>
 <script>
-const SECTION_LABELS = { finanzas:'Finanzas', onboarding:'Onboarding', operaciones:'Operaciones', kpis:'KPIs', capacitacion:'Capacitación', turnos:'Turnos', perfiles:'Perfiles' };
+const SECTION_LABELS = { finanzas:'Finanzas', onboarding:'Onboarding', operaciones:'Operaciones', kpis:'KPIs', capacitacion:'Capacitación', turnos:'Turnos', agenda:'Agenda', perfiles:'Perfiles' };
 let editingId = null;
 let _usersCache = [];
 
