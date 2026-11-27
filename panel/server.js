@@ -411,6 +411,7 @@ const PAGE_SECTION = {
   '/turnos/asistencia.html':           'turnos',
   '/turnos/configuracion.html':        'turnos',
   '/agenda/index.html':                'agenda',
+  '/agenda/app.html':                  'agenda',
   '/perfiles.html':                    'perfiles',
 };
 
