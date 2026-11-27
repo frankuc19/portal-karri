@@ -211,6 +211,7 @@ function construirDatos({ desde } = {}) {
       id: a.id,
       code: 'KT-' + a.id.replace(/-/g, '').slice(-6).toUpperCase(),
       date: slot.date,
+      slotId: slot.id,
       start: ini,
       end: fin,
       service: slot.shiftType,
@@ -245,6 +246,21 @@ function construirDatos({ desde } = {}) {
     };
   });
 
+  // Turnos planificados con sus cupos por rol (mismo cálculo que Planificación):
+  // el calendario de Agenda los muestra por tienda aunque nadie los haya tomado.
+  const idsTiendas = new Set(tiendasOut.map(t => t.id));
+  const indiceActivas = store.indiceAsignacionesActivasPorSlot();
+  const turnos = [...slotsPorId.values()]
+    .filter(s => s.date >= limite && idsTiendas.has(s.storeId))
+    .map(s => {
+      const i = store.slotConInfo(s, indiceActivas);
+      return {
+        id: s.id, storeId: s.storeId, date: s.date, shiftType: s.shiftType,
+        startTime: s.startTime, endTime: s.endTime, status: s.status || 'OPEN',
+        porRol: i.porRol, capacity: i.capacity, taken: i.taken, available: i.available, sinCupo: !!i.sinCupo,
+      };
+    });
+
   const servicios = ['AM', 'PM', 'FULL', 'CAPACITACION'].map(id => {
     const h = store.horarioDeTurno(id, '');
     const dur = (aMinutos(h.endTime) - aMinutos(h.startTime)) || 60;
@@ -258,6 +274,7 @@ function construirDatos({ desde } = {}) {
     desde: limite,
     tiendas: tiendasOut,
     servicios,
+    turnos,
     clientes: [...clientes.values()],
     reservas,
   };

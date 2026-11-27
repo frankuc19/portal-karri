@@ -319,6 +319,27 @@ tbody tr.click:hover td { background: var(--surface-2); }
   .checks { grid-template-columns: minmax(0, 1fr); }
   .checks.seven { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 }
+/* Calendario real: tablero tiendas × turnos con cupos por rol. */
+.tablero th.tienda { text-transform: none; letter-spacing: 0; font-size: .88rem; color: var(--fg); font-weight: 400; vertical-align: top; min-width: 170px; display: table-cell; }
+.tablero th.tienda > * { display: block; }
+.tablero th.tienda .muted { font-size: .75rem; margin-top: 2px; }
+.tablero th.tienda .tt { margin-top: 8px; display: flex; flex-direction: column; gap: 2px; font-size: .75rem; color: var(--muted); }
+.tablero .tt b { color: var(--fg); font-weight: 600; }
+.tablero td.tcell { vertical-align: top; padding: 8px; min-width: 190px; }
+.tc { display: flex; flex-direction: column; gap: 6px; width: 100%; text-align: left; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px; font: inherit; color: inherit; cursor: pointer; }
+button.tc:hover { border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-soft); }
+.tc.closed-t { background: var(--hatch); }
+.tc-h { display: flex; justify-content: space-between; align-items: center; gap: 6px; font-size: .82rem; }
+.tc-f { font-size: .74rem; color: var(--muted); }
+.cupo { display: grid; grid-template-columns: 58px minmax(0, 1fr) 46px; gap: 8px; align-items: center; font-size: .8rem; }
+.cupo.zero { opacity: .45; }
+.cupo .num { text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; }
+.cbar { height: 8px; background: var(--surface-2); border-radius: 999px; overflow: hidden; }
+.cbar i { display: block; height: 100%; background: var(--primary); border-radius: 999px; }
+.cbar i.full { background: var(--st-done-fg); }
+.cbar i.over { background: var(--danger); }
+.kpi .v small { font-size: .55em; color: var(--muted); font-weight: 500; }
+.kpi.dim { opacity: .45; }
 /* Embebido en el portal: sin barra interna; los módulos están en la barra del portal. */
 .embed .side { display: none !important; }
 .embed .app { grid-template-columns: minmax(0, 1fr); }
@@ -541,8 +562,12 @@ function aplicarReales(d) {
   S.real = true; S.empty = true; // sin reservas inventadas: solo las de Turnos
   S.customers = d.clientes.map((c) => ({ ...c, rut: Number(String(c.rutTxt).replace(/[^0-9kK]/g, '').slice(0, -1)) || 0 }));
   S.appts = d.reservas;
+  S.turnos = d.turnos || [];
+  S.calTienda = ''; S.calRol = '';
   S.staff = S.staff.map((u) => ({ ...u, branches: Object.keys(BRANCHES) }));
-  if (prev) ['route', 'role', 'branch', 'calDate', 'filters', 'cf', 'publicMode', 'drawer', 'folded', 'staff'].forEach((k) => { S[k] = prev[k]; });
+  if (prev) ['route', 'role', 'branch', 'calDate', 'calTienda', 'calRol', 'filters', 'cf', 'publicMode', 'drawer', 'folded', 'staff'].forEach((k) => { S[k] = prev[k]; });
+  if (S.calTienda && !BRANCHES[S.calTienda]) S.calTienda = '';
+  if (S.drawer && S.drawer.slot && !S.turnos.some((t) => t.id === S.drawer.slot)) S.drawer = null;
   else { const h = location.hash.slice(1); if (h === 'reservar') S.publicMode = true; else if (VALID.includes(h)) S.route = h; }
   if (!BRANCHES[S.branch]) S.branch = Object.keys(BRANCHES)[0] || null;
   if (S.drawer && S.drawer.appt && !S.appts.some((a) => a.id === S.drawer.appt)) S.drawer = null;
@@ -572,6 +597,7 @@ async function cambiarEstadoReal(a, to) {
     if (d.reserva) { const i = S.appts.findIndex((x) => x.id === a.id); if (i >= 0) S.appts[i] = d.reserva; }
     toast(`${a.code}: ${ST_LABEL[d.reserva ? d.reserva.status : to].toLowerCase()} · guardado en Turnos`);
     render();
+    cargarReales(); // los cupos por rol cambian (p. ej. una cancelación libera cupo)
   } catch (e) { toast('No se pudo guardar en Turnos: ' + e.message); }
 }
 function seedStaff() {
@@ -751,7 +777,7 @@ function renderApp() {
     <main class="main">
       <div class="topbar">
         <div class="title"><h1>${v.title}</h1><p>${v.sub}</p></div>
-        ${['calendario', 'reservas', 'reportes'].includes(S.route) && u.branches.length ? `<div class="field" style="flex:0 0 190px"><label for="branch-sel" class="eyebrow">Tienda</label>
+        ${['calendario', 'reservas', 'reportes'].includes(S.route) && !(S.real && S.route === 'calendario') && u.branches.length ? `<div class="field" style="flex:0 0 190px"><label for="branch-sel" class="eyebrow">Tienda</label>
           <select id="branch-sel" class="input" ${u.branches.length < 2 ? 'disabled' : ''}>${branchOptions(u.branches)}</select></div>` : ''}
         ${v.actions || ''}
       </div>
@@ -782,7 +808,102 @@ function noStoreCfg(title) {
       <p class="muted" style="max-width:460px">Esta vista necesita al menos una tienda. Crea un <b>país</b>, un <b>tipo de turno</b> y una <b>tienda</b> para empezar a operar.</p>
       <a class="btn primary" href="#tiendas">Ir a Países y tiendas</a></div></section>` };
 }
+/* ---- Calendario real: tiendas × turnos del día, con cupos por rol ---- */
+const TURNO_COLS = [['AM', 'Mañana (AM)'], ['PM', 'Tarde (PM)'], ['FULL', 'Jornada completa'], ['CAPACITACION', 'Capacitación']];
+const ROLES_T = ['Picker', 'Shopper', 'Driver'];
+const turnoById = (id) => (S.turnos || []).find((t) => t.id === id);
+const reservasDeTurno = (id) => S.appts.filter((a) => a.slotId === id);
+function cupoRow(rol, p) {
+  const pct = p.capacity > 0 ? Math.min(100, (p.taken / p.capacity) * 100) : (p.taken ? 100 : 0);
+  const cls = p.capacity > 0 && p.taken >= p.capacity ? 'full' : p.taken > p.capacity ? 'over' : '';
+  return `<div class="cupo ${p.capacity === 0 && !p.taken ? 'zero' : ''}"><span>${rol}</span><span class="cbar"><i class="${cls}" style="width:${pct}%"></i></span><span class="num">${p.taken}/${p.capacity}</span></div>`;
+}
+function celdaTurno(t, roles) {
+  if (!t) return '<td class="tcell"><span class="muted">—</span></td>';
+  const activos = reservasDeTurno(t.id).filter((a) => a.status !== 'CANCELLED');
+  const asistieron = activos.filter((a) => a.status === 'CHECKED_IN' || a.status === 'COMPLETED').length;
+  const cerrado = t.status !== 'OPEN';
+  let cuerpo, pie;
+  if (t.porRol) {
+    cuerpo = roles.map((r) => cupoRow(r, t.porRol[r])).join('');
+    const disp = roles.reduce((s, r) => s + t.porRol[r].available, 0);
+    pie = `${disp} ${disp === 1 ? 'disponible' : 'disponibles'}${asistieron ? ` · ${asistieron} asistieron` : ''}`;
+  } else {
+    cuerpo = `<div class="cupo"><span>Inscritos</span><span class="cbar"><i style="width:${t.sinCupo ? 0 : Math.min(100, (t.taken / Math.max(1, t.capacity)) * 100)}%"></i></span><span class="num">${t.sinCupo ? t.taken : `${t.taken}/${t.capacity}`}</span></div>`;
+    pie = `${t.sinCupo ? 'Sin límite de cupos' : `${t.available} disponibles`}${asistieron ? ` · ${asistieron} asistieron` : ''}`;
+  }
+  return `<td class="tcell"><button type="button" class="tc ${cerrado ? 'closed-t' : ''}" data-slot="${t.id}">
+    <span class="tc-h"><b class="num">${esc(t.startTime)}–${esc(t.endTime)}</b>${cerrado ? '<span class="tag">Cerrado</span>' : ''}</span>
+    ${cuerpo}<span class="tc-f">${pie}</span></button></td>`;
+}
+function viewCalendarReal() {
+  const date = S.calDate;
+  const roles = S.calRol ? [S.calRol] : ROLES_T;
+  const tiendas = Object.values(BRANCHES).filter((b) => !S.calTienda || b.id === S.calTienda).sort((a, b) => a.name.localeCompare(b.name));
+  const delDia = (S.turnos || []).filter((t) => t.date === date && (!S.calTienda || t.storeId === S.calTienda));
+  // Totales del día por rol (AM/PM/FULL; Capacitación no tiene cupos por rol).
+  const tot = Object.fromEntries(ROLES_T.map((r) => [r, { taken: 0, capacity: 0 }]));
+  delDia.filter((t) => t.porRol).forEach((t) => ROLES_T.forEach((r) => { tot[r].taken += t.porRol[r].taken; tot[r].capacity += t.porRol[r].capacity; }));
+  const totTienda = (id) => { const o = Object.fromEntries(roles.map((r) => [r, { taken: 0, capacity: 0 }])); delDia.filter((t) => t.storeId === id && t.porRol).forEach((t) => roles.forEach((r) => { o[r].taken += t.porRol[r].taken; o[r].capacity += t.porRol[r].capacity; })); return o; };
+  const pctTxt = (x) => (x.capacity ? Math.round((x.taken / x.capacity) * 100) + ' %' : '—');
+  const kpis = ROLES_T.map((r) => `<div class="kpi ${S.calRol && S.calRol !== r ? 'dim' : ''}"><span class="eyebrow">${r}</span><span class="v">${tot[r].taken}<small>/${tot[r].capacity}</small></span><span class="d">cupos tomados · cobertura ${pctTxt(tot[r])}</span></div>`).join('');
+  const totalAll = ROLES_T.reduce((s, r) => ({ taken: s.taken + tot[r].taken, capacity: s.capacity + tot[r].capacity }), { taken: 0, capacity: 0 });
+  const filas = tiendas.map((b) => {
+    const t = (tipo) => delDia.find((x) => x.storeId === b.id && x.shiftType === tipo);
+    const tt = totTienda(b.id);
+    return `<tr><th scope="row" class="tienda"><b>${esc(b.name)}</b><span class="muted">${b.code ? 'cód. ' + esc(b.code) + ' · ' : ''}${esc(b.city)}</span>
+      <span class="tt">${roles.map((r) => `<span>${r} <b class="num">${tt[r].taken}/${tt[r].capacity}</b></span>`).join('')}</span></th>
+      ${TURNO_COLS.map(([tipo]) => celdaTurno(t(tipo), roles)).join('')}</tr>`;
+  }).join('');
+  const opt = (v, txt, cur) => `<option value="${v}" ${v === cur ? 'selected' : ''}>${esc(txt)}</option>`;
+  const html = `
+    <div class="kpis">${kpis}<div class="kpi"><span class="eyebrow">Total</span><span class="v">${totalAll.taken}<small>/${totalAll.capacity}</small></span><span class="d">${delDia.length} turnos planificados · cobertura ${pctTxt(totalAll)}</span></div></div>
+    <section class="card">
+      <header style="align-items:end;flex-wrap:wrap;gap:12px">
+        <div class="cal-tools">
+          <button class="btn sm" type="button" data-day="-1" aria-label="Día anterior">‹</button>
+          <button class="btn sm" type="button" data-day="0">Hoy</button>
+          <button class="btn sm" type="button" data-day="1" aria-label="Día siguiente">›</button>
+          <h2 style="margin-left:6px;text-transform:capitalize">${fmtLong(date)}</h2>
+          <input type="date" id="cal-date" class="input" value="${date}" style="width:auto" aria-label="Elegir fecha">
+        </div>
+        <div class="filters" style="flex:0 1 380px">
+          <div class="field"><label for="cal-tienda">Tienda</label><select id="cal-tienda" class="input">${opt('', 'Todas las tiendas', S.calTienda)}${Object.values(BRANCHES).sort((a, b) => a.name.localeCompare(b.name)).map((b) => opt(b.id, b.name, S.calTienda)).join('')}</select></div>
+          <div class="field"><label for="cal-rol">Rol</label><select id="cal-rol" class="input">${opt('', 'Todos los roles', S.calRol)}${ROLES_T.map((r) => opt(r, r, S.calRol)).join('')}</select></div>
+        </div>
+      </header>
+      <div class="table-wrap"><table class="tablero"><thead><tr><th>Tienda</th>${TURNO_COLS.map(([, l]) => `<th>${l}</th>`).join('')}</tr></thead>
+        <tbody>${filas || '<tr><td colspan="5" class="empty">No hay tiendas.</td></tr>'}</tbody></table></div>
+    </section>
+    <p class="muted" style="font-size:.8rem">Cupos por rol de cada turno, como en Turnos → Planificación: <b>tomados / cupos</b>. Se llenan cuando un Karrier toma el turno en el link <b>/turnos</b>. Haz clic en un turno para ver quiénes están agendados. Los cupos se editan en <a href="/turnos/planificacion.html" target="_top">Planificación</a>.</p>`;
+  return { title: 'Calendario', sub: `${S.calTienda ? esc(BRANCHES[S.calTienda].name) : `${tiendas.length} tiendas`} · ${totalAll.taken} de ${totalAll.capacity} cupos tomados`, html,
+    actions: can.write() ? '<button class="btn primary" type="button" data-new>Tomar turno (link /turnos)</button>' : '',
+    bind() {
+      root.querySelectorAll('[data-day]').forEach((b) => b.onclick = () => { const d = Number(b.dataset.day); S.calDate = d === 0 ? TODAY : addDays(S.calDate, d); render(); });
+      document.getElementById('cal-date').onchange = (e) => { if (/^\d{4}-\d{2}-\d{2}$/.test(e.target.value)) { S.calDate = e.target.value; render(); } };
+      document.getElementById('cal-tienda').onchange = (e) => { S.calTienda = e.target.value; render(); };
+      document.getElementById('cal-rol').onchange = (e) => { S.calRol = e.target.value; render(); };
+      root.querySelectorAll('[data-slot]').forEach((el) => el.onclick = () => { S.drawer = { slot: el.dataset.slot }; render(); });
+    } };
+}
+function turnoDrawerHtml(t) {
+  const b = BRANCHES[t.storeId]; const nombre = (TURNO_COLS.find(([k]) => k === t.shiftType) || [0, t.shiftType])[1];
+  const res = reservasDeTurno(t.id); const activas = res.filter((a) => a.status !== 'CANCELLED'); const canceladas = res.length - activas.length;
+  const grupos = t.porRol ? ROLES_T.map((r) => [r, activas.filter((a) => detalleDe(a, 'Rol') === r)]) : [['Inscritos', activas]];
+  const sinRol = t.porRol ? activas.filter((a) => !ROLES_T.includes(detalleDe(a, 'Rol'))) : [];
+  if (sinRol.length) grupos.push(['Sin rol', sinRol]);
+  return `<div class="scrim" data-scrim><aside class="drawer" role="dialog" aria-modal="true" aria-label="Detalle del turno">
+    <header><div><span class="eyebrow">${esc(b ? b.name : '')}</span><h2>${esc(nombre)}</h2><p class="muted num">${fmtLong(t.date)} · ${esc(t.startTime)}–${esc(t.endTime)}${t.status !== 'OPEN' ? ' · Cerrado' : ''}</p></div><button class="btn ghost sm" type="button" data-close aria-label="Cerrar">✕</button></header>
+    <div class="body">
+      <div class="tc" style="cursor:default">${t.porRol ? ROLES_T.map((r) => cupoRow(r, t.porRol[r])).join('') : `<div class="cupo"><span>Inscritos</span><span class="cbar"><i style="width:${t.sinCupo ? 0 : Math.min(100, (t.taken / Math.max(1, t.capacity)) * 100)}%"></i></span><span class="num">${t.sinCupo ? t.taken : `${t.taken}/${t.capacity}`}</span></div>`}
+        <span class="tc-f">${t.sinCupo ? 'Sin límite de cupos' : `${t.available} disponibles de ${t.capacity}`}${canceladas ? ` · ${canceladas} ${canceladas === 1 ? 'cancelado' : 'cancelados'}` : ''}</span></div>
+      ${grupos.map(([g, list]) => `<div><h3 style="margin-bottom:8px">${esc(g)} (${list.length}${t.porRol && t.porRol[g] ? ' de ' + t.porRol[g].capacity : ''})</h3><div class="list card">${list.map((a) => apptRow(a, false)).join('') || '<p class="empty">Nadie agendado.</p>'}</div></div>`).join('')}
+    </div>
+    <footer>${can.write() ? '<button class="btn primary" type="button" data-new>Tomar turno (link /turnos)</button>' : ''}<a class="btn" href="/turnos/planificacion.html" target="_top">Editar cupos en Planificación</a></footer>
+  </aside></div>`;
+}
 function viewCalendar() {
+  if (S.real) return viewCalendarReal();
   if (!BRANCHES[S.branch]) return noStoreCfg('Calendario');
   const date = S.calDate; const branch = BRANCHES[S.branch];
   const cap = storeCap(S.branch);
@@ -1025,6 +1146,7 @@ function viewIntegraciones() {
 
 /* ---- Drawer ---- */
 function renderDrawer() {
+  if (S.drawer.slot) return turnoDrawerHtml(turnoById(S.drawer.slot));
   if (S.drawer.cust) return customerDrawerHtml(cust(S.drawer.cust));
   const a = S.appts.find((x) => x.id === S.drawer.appt); const c = cust(a.customer), s = svcById(a.service);
   const acts = can.write() ? (a.real ? TRANSITIONS_REAL : TRANSITIONS)[a.status] || [] : [];

@@ -37,14 +37,16 @@
     });
   }
 
-  // Primera carga: el iframe abre directo en el módulo pedido.
-  frame.src = '/agenda/app.html#' + rutaActual();
+  // Primera carga: el iframe abre directo en el módulo pedido. La versión
+  // (?v=) obliga al navegador a bajar la app nueva tras cada deploy.
+  const APP = '/agenda/app.html?v=20261127b';
+  frame.src = APP + '#' + rutaActual();
 
   // Clic en un módulo de la barra del portal: solo cambia el #, sin recargar.
   window.addEventListener('hashchange', () => {
     const ruta = rutaActual();
     marcarActivo(ruta);
-    try { frame.contentWindow.location.hash = ruta; } catch (e) { frame.src = '/agenda/app.html#' + ruta; }
+    try { frame.contentWindow.location.hash = ruta; } catch (e) { frame.src = APP + '#' + ruta; }
     const sb = document.getElementById('sidebar');
     if (sb && sb.classList.contains('sidebar-mobile-open') && window._toggleSidebarPanel) window._toggleSidebarPanel();
   });
