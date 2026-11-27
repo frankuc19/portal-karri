@@ -329,9 +329,10 @@ tbody tr.click:hover td { background: var(--surface-2); }
 </head>
 <body>
 <div class="sim-banner" role="note">
-  <span><b>Prototipo</b> · Karri Agenda, el reemplazo de AgendaPro. Datos de ejemplo; nada se guarda.</span>
+  <span id="sim-text"><b>Cargando reservas…</b></span>
   <span style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
     <label>Probar como <select id="sim-role"></select></label>
+    <button type="button" id="sim-refresh" hidden>Actualizar</button>
     <button type="button" id="sim-public">Ver página pública de reservas</button>
     <button type="button" id="sim-demo">Cargar datos demo</button>
     <button type="button" id="sim-reset">Vaciar datos</button>
@@ -343,8 +344,9 @@ tbody tr.click:hover td { background: var(--surface-2); }
 <script>
 'use strict';
 /* =================== Utilities (mirror @karri/shared) =================== */
-const TODAY = '2026-11-25';
-const NOW = 10 * 60 + 40; // 10:40 hora de Santiago en la simulación
+// Fecha y hora reales de Chile (las reservas de Turnos son reales).
+const TODAY = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Santiago' });
+const NOW = (() => { const [h, m] = new Date().toLocaleTimeString('es-CL', { timeZone: 'America/Santiago', hour: '2-digit', minute: '2-digit', hour12: false }).split(':').map(Number); return (h % 24) * 60 + m; })();
 const DAYS_SHORT = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb'];
 const DAYS_LONG = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -464,7 +466,9 @@ const COMPANIES = [
   ['Comercial Los Aromos Ltda.', 78345106], ['Abarrotes Cordillera SpA', 76902775], ['Fletes Rapel Ltda.', 77456019],
 ];
 const DOCS = ['Cédula de identidad', 'Licencia de conducir', 'Hoja de vida del conductor', 'Certificado de antecedentes', 'Padrón del vehículo', 'Revisión técnica', 'SOAP vigente'];
-const SOURCE_LABEL = { MANUAL: 'Creado por Karri', AGENDAPRO: 'AgendaPro', PUBLIC: 'Página pública' };
+const SOURCE_LABEL = { MANUAL: 'Creado por Karri', AGENDAPRO: 'AgendaPro', PUBLIC: 'Página pública', TURNOS: 'Link /turnos' };
+// RUT para mostrar: el real tal como viene de Turnos, o el calculado en la demo.
+const rutDe = (c) => c.rutTxt || rutDe(c);
 const CSTATUS = { ACTIVE: ['Activo', 'COMPLETED'], BLOCKED: ['Bloqueado', 'NO_SHOW'] };
 const cstatusPill = (st) => `<span class="pill st-${CSTATUS[st][1]}">${CSTATUS[st][0]}</span>`;
 const STAFF_STATUS = { ACTIVE: ['Activo', 'COMPLETED'], INVITED: ['Invitación enviada', 'PENDING'], DISABLED: ['Desactivado', 'CANCELLED'] };
@@ -493,6 +497,10 @@ function seedCustomers() {
 }
 
 /* =================== State =================== */
+// Copias de la configuración demo: el modo real las reemplaza y la demo las restaura.
+const SERVICES0 = SERVICES.map((s) => ({ ...s }));
+const RESOURCES0 = RESOURCES.slice();
+const HOLIDAYS_CL0 = { ...HOLIDAYS.CL };
 let S;
 function freshState(empty) {
   return { route: empty ? 'tiendas' : 'calendario', loggedIn: true, role: 'ADMIN', empty: !!empty, branch: Object.keys(BRANCHES)[0] || null, calDate: TODAY, customers: empty ? [] : seedCustomers(), appts: [], generated: {}, seq: 24810, drawer: null, modal: null,
@@ -503,10 +511,68 @@ function freshState(empty) {
 const user = () => USERS[S.role];
 const can = { write: () => S.role !== 'VIEWER' && S.role !== 'RESOURCE', admin: () => S.role === 'ADMIN', reports: () => ['ADMIN', 'BRANCH_MANAGER', 'VIEWER'].includes(S.role) };
 function boot(empty) {
+  SERVICES.splice(0, SERVICES.length, ...SERVICES0.map((s) => ({ ...s })));
+  RESOURCES.splice(0, RESOURCES.length, ...RESOURCES0);
+  HOLIDAYS.CL = { ...HOLIDAYS_CL0 };
   if (empty) { COUNTRIES = {}; SHIFTS = []; BRANCHES = {}; } else seedConfig();
   Object.keys(USERS).forEach((k) => { USERS[k].branches = USER_BRANCHES0[k].filter((b) => BRANCHES[b]); });
   USERS.ADMIN.branches = Object.keys(BRANCHES);
   S = freshState(empty);
+}
+/* =================== Reservas reales (Turnos) ===================
+   Cada turno tomado en el link público /turnos es una reserva. El servidor
+   (/api/agenda/datos) las arma en vivo con los datos del Karrier y su alta en
+   Onboarding; aquí solo se cargan y se muestran. */
+function aplicarReales(d) {
+  const prev = S && S.real ? S : null;
+  COUNTRIES = { CL: { code: 'CL', name: 'Chile', tz: 'America/Santiago', currency: 'CLP' } };
+  SHIFTS = []; BRANCHES = {};
+  for (const t of d.tiendas) {
+    const hours = Math.min(24, Math.max(1, t.endHour - t.startHour));
+    const sid = `h${t.startHour}-${hours}`;
+    if (!shiftById(sid)) SHIFTS.push({ id: sid, name: `Turnos ${pad(t.startHour)}:00 a ${pad(t.startHour + hours)}:00`, start: t.startHour, hours, days: [0, 1, 2, 3, 4, 5, 6] });
+    BRANCHES[t.id] = { id: t.id, country: 'CL', name: t.name, city: t.city || '', slug: slug(t.name).replace(/\./g, '-'), address: t.address || '', shift: sid, cap: t.cap || 1, code: t.code };
+  }
+  HOLIDAYS.CL = {}; // el retail opera en feriados: no se bloquea el calendario
+  SERVICES.splice(0, SERVICES.length, ...d.servicios);
+  RESOURCES.splice(0, RESOURCES.length);
+  Object.keys(USERS).forEach((k) => { USERS[k].branches = Object.keys(BRANCHES); });
+  S = freshState(false);
+  S.real = true; S.empty = true; // sin reservas inventadas: solo las de Turnos
+  S.customers = d.clientes.map((c) => ({ ...c, rut: Number(String(c.rutTxt).replace(/[^0-9kK]/g, '').slice(0, -1)) || 0 }));
+  S.appts = d.reservas;
+  S.staff = S.staff.map((u) => ({ ...u, branches: Object.keys(BRANCHES) }));
+  if (prev) ['route', 'role', 'branch', 'calDate', 'filters', 'cf', 'publicMode', 'drawer', 'folded', 'staff'].forEach((k) => { S[k] = prev[k]; });
+  else { const h = location.hash.slice(1); if (h === 'reservar') S.publicMode = true; else if (VALID.includes(h)) S.route = h; }
+  if (!BRANCHES[S.branch]) S.branch = Object.keys(BRANCHES)[0] || null;
+  if (S.drawer && S.drawer.appt && !S.appts.some((a) => a.id === S.drawer.appt)) S.drawer = null;
+  if (S.drawer && S.drawer.cust && !cust(S.drawer.cust)) S.drawer = null;
+}
+let cargandoReales = false;
+async function cargarReales({ avisar } = {}) {
+  if (cargandoReales) return; cargandoReales = true;
+  try {
+    const r = await fetch('/api/agenda/datos', { credentials: 'same-origin', headers: { Accept: 'application/json' } });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok || !d.ok) throw new Error(d.error || `HTTP ${r.status}`);
+    aplicarReales(d);
+    if (avisar) toast(`Reservas actualizadas: ${d.reservas.length} turnos de /turnos`);
+    render();
+  } catch (e) {
+    if (!S || !S.real) { boot(false); S.loading = false; render(); toast('No se pudieron cargar las reservas de Turnos. Mostrando datos de ejemplo.'); }
+    else toast('No se pudo actualizar: ' + e.message);
+  } finally { cargandoReales = false; }
+}
+async function cambiarEstadoReal(a, to) {
+  if (to === 'CANCELLED' && !window.confirm(`¿Cancelar el turno de ${cust(a.customer).name}? Se libera el cupo en Turnos.`)) return;
+  try {
+    const r = await fetch(`/api/agenda/reservas/${encodeURIComponent(a.id)}/estado`, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ to }) });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok || !d.ok) throw new Error(d.error || `HTTP ${r.status}`);
+    if (d.reserva) { const i = S.appts.findIndex((x) => x.id === a.id); if (i >= 0) S.appts[i] = d.reserva; }
+    toast(`${a.code}: ${ST_LABEL[d.reserva ? d.reserva.status : to].toLowerCase()} · guardado en Turnos`);
+    render();
+  } catch (e) { toast('No se pudo guardar en Turnos: ' + e.message); }
 }
 function seedStaff() {
   const base = Object.entries(USERS).map(([role, u], i) => ({ id: 's' + i, name: u.name, email: u.email, role, branches: u.branches.slice(), status: 'ACTIVE', sso: i % 2 === 0, last: `${fmtDate(TODAY)} ${hm(480 + i * 23)}` }));
@@ -603,7 +669,17 @@ const TRANSITIONS = {
 };
 const ACTION_LOG = { CONFIRMED: 'Confirmó la reserva', CHECKED_IN: 'Registró llegada', COMPLETED: 'Marcó como completada', NO_SHOW: 'Marcó como no asistió', CANCELLED: 'Canceló la reserva' };
 const pill = (st) => `<span class="pill st-${st}">${ST_LABEL[st]}</span>`;
-const ORIGIN_LABEL = { PUBLIC: 'Página pública', BACKOFFICE: 'Backoffice', API: 'API (TMS)', IMPORT: 'AgendaPro' };
+const ORIGIN_LABEL = { PUBLIC: 'Página pública', BACKOFFICE: 'Backoffice', API: 'API (TMS)', IMPORT: 'AgendaPro', TURNOS: 'Link /turnos' };
+// Reservas reales (turnos de /turnos): los cambios se guardan en Turnos → Asistencia / Asignaciones.
+const TRANSITIONS_REAL = {
+  PENDING: [],
+  CONFIRMED: [['CHECKED_IN', 'Registrar llegada', 'primary'], ['NO_SHOW', 'No asistió', ''], ['CANCELLED', 'Cancelar turno', 'danger']],
+  CHECKED_IN: [['NO_SHOW', 'Corregir: no asistió', ''], ['CONFIRMED', 'Quitar asistencia', '']],
+  COMPLETED: [['NO_SHOW', 'Corregir: no asistió', '']],
+  NO_SHOW: [['CHECKED_IN', 'Corregir: sí asistió', ''], ['CONFIRMED', 'Quitar marca', '']],
+  CANCELLED: [],
+};
+const detalleDe = (a, k) => ((a.detalle || []).find((x) => x.k === k) || {}).v || '';
 const cust = (id) => S.customers.find((c) => c.id === id);
 
 /* =================== Rendering =================== */
@@ -640,8 +716,15 @@ function syncRoute() {
   const rs = document.getElementById('sim-role');
   rs.innerHTML = Object.keys(USERS).map((k) => `<option value="${k}" ${k === S.role ? 'selected' : ''}>${ROLE_LABELS[k]}</option>`).join('');
   if (window.parent !== window) window.parent.postMessage({ agendaRoute: r }, location.origin);
+  document.getElementById('sim-text').innerHTML = S.loading ? '<b>Cargando reservas de Turnos…</b>'
+    : S.real ? '<b>Reservas reales</b> · cada turno tomado en el link /turnos es una reserva, con los datos del Karrier y su alta en Onboarding.'
+    : '<b>Datos de ejemplo</b> · prototipo de Karri Agenda; nada se guarda.';
+  document.getElementById('sim-demo').textContent = S.real ? 'Ver datos demo' : 'Ver reservas reales';
+  document.getElementById('sim-refresh').hidden = !S.real;
+  document.getElementById('sim-reset').hidden = !!S.real;
 }
 function renderApp() {
+  if (S.loading) { root.innerHTML = '<div class="card" style="margin:24px;padding:32px;text-align:center"><h2>Cargando reservas…</h2><p class="muted">Leyendo los turnos tomados en /turnos.</p></div>'; return; }
   document.getElementById('sim-public').textContent = S.publicMode ? 'Volver al backoffice' : 'Ver página pública de reservas';
   if (S.publicMode) { root.innerHTML = renderPublic(); bindPublic(); return; }
   if (!S.loggedIn) { root.innerHTML = renderLogin(); bindLogin(); return; }
@@ -718,7 +801,9 @@ function viewCalendar() {
   let closed = ''; let cur = startMin;
   for (const [a, b] of ivAll) { if (a > cur) closed += `<div class="closed" style="top:${(cur - startMin) * PPM}px;height:${(a - cur) * PPM}px;left:0;right:0"></div>`; cur = b; }
   if (cur < endMin) closed += `<div class="closed" style="top:${(cur - startMin) * PPM}px;height:${(endMin - cur) * PPM}px;left:0;right:0"></div>`;
-  const evs = day.map((a) => { const c = cust(a.customer); return `<button type="button" class="ev st-${a.status}" data-appt="${a.id}" style="top:${(a.start - startMin) * PPM + 1}px;height:${(a.end - a.start) * PPM - 2}px;left:calc(${a._lane * w}% + 1px);width:calc(${w}% - 3px);right:auto"><b>${esc(c.name)}</b><span class="num">${hm(a.start)}–${hm(a.end)} · ${esc(svcById(a.service).name)}</span>${a.plate && a.end - a.start >= 45 ? `<span class="mono">${fmtPlate(a.plate)}</span>` : ''}</button>`; }).join('');
+  const evs = day.map((a) => { const c = cust(a.customer); const rol = a.real ? detalleDe(a, 'Rol') : ''; return `<button type="button" class="ev st-${a.status}" data-appt="${a.id}" style="top:${(a.start - startMin) * PPM + 1}px;height:${(a.end - a.start) * PPM - 2}px;left:calc(${a._lane * w}% + 1px);width:calc(${w}% - 3px);right:auto"><b>${esc(c.name)}</b><span class="num">${hm(a.start)}–${hm(a.end)} · ${esc(svcById(a.service).name)}</span>${rol ? `<span>${esc(rol)}</span>` : ''}${a.plate && a.end - a.start >= 45 ? `<span class="mono">${fmtPlate(a.plate)}</span>` : ''}</button>`; }).join('');
+  // Con muchos Karriers en el mismo turno, cada columna tiene un ancho mínimo y el calendario se desplaza a lo ancho.
+  const colMin = Math.max(240, lanes * 150);
   const nowLine = date === TODAY && NOW > startMin && NOW < endMin ? `<div class="now-line" style="top:${(NOW - startMin) * PPM}px"></div>` : '';
   const html = `
     <section class="card">
@@ -733,16 +818,16 @@ function viewCalendar() {
         <div class="legend">${['PENDING', 'CONFIRMED', 'CHECKED_IN', 'COMPLETED', 'NO_SHOW'].map(pill).join('')}</div>
       </header>
       <div class="cal-scroll">
-        <div class="cal" style="--hour:${60 * PPM}px;grid-template-columns:56px minmax(240px, 1fr)">
+        <div class="cal" style="--hour:${60 * PPM}px;grid-template-columns:56px minmax(${colMin}px, 1fr)">
           <div class="cal-head" style="border-right:1px solid var(--border)"></div>
-          <div class="cal-head"><b>${esc(branch.name)}</b><span>Capacidad ${cap} ${cap === 1 ? 'atención' : 'atenciones'} simultánea${cap === 1 ? '' : 's'} · turno ${esc(sh.name)}</span></div>
+          <div class="cal-head"><b>${esc(branch.name)}</b><span>${S.real ? `${day.length} ${day.length === 1 ? 'Karrier agendado' : 'Karriers agendados'} · cupos por turno hasta ${cap} · horario ${esc(sh.name.replace('Turnos ', ''))}` : `Capacidad ${cap} ${cap === 1 ? 'atención' : 'atenciones'} simultánea${cap === 1 ? '' : 's'} · turno ${esc(sh.name)}`}</span></div>
           <div class="cal-gutter" style="height:${H}px">${gutter}</div>
           <div class="cal-col ${can.write() ? '' : 'ro'}" data-cal style="height:${H}px">${closed}${evs}${nowLine}</div>
         </div>
       </div>
     </section>
-    <p class="muted" style="font-size:.8rem">La reserva se asocia a la tienda, no a un andén; caben hasta ${cap} a la misma hora. ${can.write() ? 'Haz clic en un espacio libre para reservar a esa hora. ' : ''}Las franjas rayadas están fuera del horario de la tienda. Turno: ${esc(sh.name)}, ${shiftText(sh)}, ${daysText(sh.days).toLowerCase()}. Zona horaria ${COUNTRIES[branch.country].tz}.</p>`;
-  return { title: 'Calendario', sub: `${esc(branch.name)} · ${day.length} reservas activas · capacidad ${cap}`, html, actions: can.write() ? '<button class="btn primary" type="button" data-new>Nueva reserva</button>' : '',
+    ${S.real ? `<p class="muted" style="font-size:.8rem">Cada bloque es un turno tomado en el link <b>/turnos</b>. Haz clic en uno para ver todos los datos del Karrier y registrar su asistencia (se guarda en Turnos). Las canceladas no se muestran en el calendario; están en Reservas.</p>` : `<p class="muted" style="font-size:.8rem">La reserva se asocia a la tienda, no a un andén; caben hasta ${cap} a la misma hora. ${can.write() ? 'Haz clic en un espacio libre para reservar a esa hora. ' : ''}Las franjas rayadas están fuera del horario de la tienda. Turno: ${esc(sh.name)}, ${shiftText(sh)}, ${daysText(sh.days).toLowerCase()}. Zona horaria ${COUNTRIES[branch.country].tz}.</p>`}`;
+  return { title: 'Calendario', sub: S.real ? `${esc(branch.name)} · ${day.length} ${day.length === 1 ? 'turno agendado' : 'turnos agendados'}` : `${esc(branch.name)} · ${day.length} reservas activas · capacidad ${cap}`, html, actions: can.write() ? '<button class="btn primary" type="button" data-new>Nueva reserva</button>' : '',
     bind() {
       root.querySelectorAll('[data-day]').forEach((b) => b.onclick = () => { const d = Number(b.dataset.day); S.calDate = d === 0 ? TODAY : addDays(S.calDate, d); render(); });
       if (can.write()) { const col = root.querySelector('[data-cal]'); if (col) col.onclick = (e) => {
@@ -763,7 +848,7 @@ function viewReservas() {
   const q = f.q.trim().toLowerCase(); const qRut = q.replace(/[^0-9k]/g, '');
   list = list.filter((a) => (!f.status || a.status === f.status) && (!f.service || a.service === f.service) && (!q || cust(a.customer).name.toLowerCase().includes(q) || a.code.toLowerCase().includes(q) || (qRut.length > 3 && String(cust(a.customer).rut).includes(qRut)) || (a.plate && a.plate.toLowerCase().includes(q.replace(/[^a-z0-9]/g, '')))));
   list.sort((a, b) => (a.date + pad(a.start)).localeCompare(b.date + pad(b.start)) * (f.range === 'past' ? -1 : 1));
-  const rows = list.slice(0, 120).map((a) => { const c = cust(a.customer); return `<tr class="click" data-appt="${a.id}"><td class="mono">${a.code}</td><td class="num">${fmtDate(a.date)}<br><span class="muted">${hm(a.start)}–${hm(a.end)}</span></td><td><b>${esc(c.name)}</b><br><span class="muted mono">${formatRut(c.rut)}</span></td><td>${esc(svcById(a.service).name)}</td><td>${a.plate ? `<span class="plate">${fmtPlate(a.plate)}</span>` : '<span class="muted">—</span>'}</td><td><span class="tag">${ORIGIN_LABEL[a.origin]}</span></td><td>${pill(a.status)}</td></tr>`; }).join('');
+  const rows = list.slice(0, 120).map((a) => { const c = cust(a.customer); return `<tr class="click" data-appt="${a.id}"><td class="mono">${a.code}</td><td class="num">${fmtDate(a.date)}<br><span class="muted">${hm(a.start)}–${hm(a.end)}</span></td><td><b>${esc(c.name)}</b><br><span class="muted mono">${rutDe(c)}</span></td><td>${esc(svcById(a.service).name)}</td><td>${a.real ? esc(detalleDe(a, 'Rol') || '—') : a.plate ? `<span class="plate">${fmtPlate(a.plate)}</span>` : '<span class="muted">—</span>'}</td><td><span class="tag">${ORIGIN_LABEL[a.origin]}</span></td><td>${pill(a.status)}</td></tr>`; }).join('');
   const html = `
     <section class="card">
       <header style="align-items:end">
@@ -774,7 +859,7 @@ function viewReservas() {
           <div class="field"><label for="f-svc">Servicio</label><select id="f-svc" class="input"><option value="">Todos</option>${SERVICES.map((s) => `<option value="${s.id}" ${f.service === s.id ? 'selected' : ''}>${s.name}</option>`).join('')}</select></div>
         </div>
       </header>
-      <div class="table-wrap"><table><thead><tr><th>Código</th><th>Fecha</th><th>Cliente</th><th>Servicio</th><th>Patente</th><th>Canal</th><th>Estado</th></tr></thead>
+      <div class="table-wrap"><table><thead><tr><th>Código</th><th>Fecha</th><th>${S.real ? 'Karrier' : 'Cliente'}</th><th>${S.real ? 'Turno' : 'Servicio'}</th><th>${S.real ? 'Rol' : 'Patente'}</th><th>Canal</th><th>Estado</th></tr></thead>
       <tbody>${rows || '<tr><td colspan="7" class="empty">No hay reservas con esos filtros.</td></tr>'}</tbody></table></div>
     </section>`;
   return { title: 'Reservas', sub: `${list.length} reservas en ${BRANCHES[S.branch].name}`, html,
@@ -797,12 +882,12 @@ function viewClientes() {
     .sort((a, b) => b.since.localeCompare(a.since) || a.name.localeCompare(b.name));
   const counts = {}; S.appts.forEach((a) => counts[a.customer] = (counts[a.customer] || 0) + 1);
   const opt = (v, t, cur) => `<option value="${v}" ${v === cur ? 'selected' : ''}>${esc(t)}</option>`;
-  const rows = all.map((c) => `<tr class="click" data-cust="${c.id}"><td><b>${esc(c.name)}</b><div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:3px">${c.tags.map((t) => `<span class="tag">${esc(t)}</span>`).join('')}</div></td><td class="mono">${formatRut(c.rut)}</td><td class="num">${fmtPhone(c.phone)}<br><span class="muted">${esc(c.email)}</span></td><td><span class="tag">${SOURCE_LABEL[c.source]}</span></td><td>${cstatusPill(c.status)}</td><td class="num">${counts[c.id] || 0}</td><td>${c.consent ? '<span class="muted">Vigente</span>' : '<span class="pill st-PENDING">Sin consentimiento</span>'}</td></tr>`).join('');
+  const rows = all.map((c) => `<tr class="click" data-cust="${c.id}"><td><b>${esc(c.name)}</b><div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:3px">${c.tags.map((t) => `<span class="tag">${esc(t)}</span>`).join('')}</div></td><td class="mono">${rutDe(c)}</td><td class="num">${fmtPhone(c.phone)}<br><span class="muted">${esc(c.email)}</span></td><td><span class="tag">${SOURCE_LABEL[c.source]}</span></td><td>${cstatusPill(c.status)}</td><td class="num">${counts[c.id] || 0}</td><td>${c.consent === null ? '<span class="muted">—</span>' : c.consent ? '<span class="muted">Vigente</span>' : '<span class="pill st-PENDING">Sin consentimiento</span>'}</td></tr>`).join('');
   const html = `
     <div class="kpis">
       <div class="kpi"><span class="eyebrow">Clientes</span><span class="v">${S.customers.length}</span><span class="d">${S.customers.filter((c) => c.type === 'COMPANY').length} empresas</span></div>
       <div class="kpi"><span class="eyebrow">Personas</span><span class="v">${S.customers.filter((c) => c.type === 'PERSON').length}</span><span class="d">con RUT de persona natural</span></div>
-      <div class="kpi"><span class="eyebrow">Desde página pública</span><span class="v">${S.customers.filter((c) => c.source === 'PUBLIC').length}</span><span class="d">se registraron al reservar</span></div>
+      ${S.real ? `<div class="kpi"><span class="eyebrow">En Altas Onboarding</span><span class="v">${S.customers.filter((c) => c.enAltas).length}</span><span class="d">con ficha completa</span></div>` : `<div class="kpi"><span class="eyebrow">Desde página pública</span><span class="v">${S.customers.filter((c) => c.source === 'PUBLIC').length}</span><span class="d">se registraron al reservar</span></div>`}
       <div class="kpi"><span class="eyebrow">Bloqueados</span><span class="v">${S.customers.filter((c) => c.status === 'BLOCKED').length}</span><span class="d">no pueden reservar</span></div>
     </div>
     <section class="card">
@@ -817,7 +902,7 @@ function viewClientes() {
     </section>
     <p class="muted" style="font-size:.8rem">Los datos personales se muestran solo a roles autorizados (Ley 21.719). El RUT es único: si la página pública o la API envían un RUT existente, se actualiza el cliente en vez de duplicarlo.</p>`;
   return { title: 'Clientes', sub: `${all.length} de ${S.customers.length} clientes`, html,
-    actions: can.write() ? `<button class="btn" type="button" data-sim="Importación de CSV: 0 filas con error, 0 duplicados (simulado)">Importar CSV</button><button class="btn primary" type="button" data-form="customer">Nuevo cliente</button>` : '',
+    actions: can.write() && !S.real ? `<button class="btn" type="button" data-sim="Importación de CSV: 0 filas con error, 0 duplicados (simulado)">Importar CSV</button><button class="btn primary" type="button" data-form="customer">Nuevo cliente</button>` : '',
     bind() {
       const q = document.getElementById('c-q'); q.oninput = () => { S.cf.q = q.value; const pos = q.selectionStart; render(); const n = document.getElementById('c-q'); n.focus(); n.setSelectionRange(pos, pos); };
       [['c-type', 'type'], ['c-status', 'status'], ['c-source', 'source'], ['c-tag', 'tag']].forEach(([id, k]) => document.getElementById(id).onchange = (e) => { S.cf[k] = e.target.value; render(); });
@@ -826,11 +911,11 @@ function viewClientes() {
 
 /* ---- Países y tiendas ---- */
 function viewTiendas() {
-  const w = can.admin(); const countries = Object.values(COUNTRIES); const all = Object.values(BRANCHES);
+  const w = can.admin() && !S.real; const countries = Object.values(COUNTRIES); const all = Object.values(BRANCHES);
   const storeRows = (c) => all.filter((b) => b.country === c.code).map((b) => { const sh = shiftById(b.shift);
     return `<tr><td><b>${esc(b.name)}</b><br><span class="muted">${esc(b.city)} · ${esc(b.address)}</span></td><td><b>${esc(sh.name)}</b><br><span class="muted num">${shiftText(sh)}</span></td><td>${ruler(sh)}<span class="muted" style="font-size:.72rem">${daysText(sh.days)}</span></td><td class="num">${b.cap || 1} ${(b.cap || 1) === 1 ? 'atención' : 'atenciones'}</td><td>${w ? `<button class="btn sm" type="button" data-edit-store="${b.id}">Editar</button>` : ''}</td></tr>`; }).join('');
   const html = `
-    ${w ? '' : `<section class="card"><div class="body" style="display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap"><span>Estás viendo como <b>${ROLE_LABELS[S.role]}</b>: solo el Administrador puede crear, editar o eliminar países, tiendas y turnos.</span><button class="btn primary" type="button" data-as-admin>Ver como Administrador</button></div></section>`}
+    ${S.real ? '<section class="card"><div class="body">Las tiendas, sus horarios y cupos vienen de <b>Turnos</b>. Para editarlos, ve a <a href="/turnos/tiendas.html" target="_top">Turnos → Tiendas</a> o <a href="/turnos/planificacion.html" target="_top">Planificación</a>.</div></section>' : w ? '' : `<section class="card"><div class="body" style="display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap"><span>Estás viendo como <b>${ROLE_LABELS[S.role]}</b>: solo el Administrador puede crear, editar o eliminar países, tiendas y turnos.</span><button class="btn primary" type="button" data-as-admin>Ver como Administrador</button></div></section>`}
     <div class="hier"><span class="tag">País</span><span aria-hidden="true">→</span><span class="tag">Tienda</span><span aria-hidden="true">→</span><span class="tag">Tipo de turno</span><span class="muted">Cada tienda pertenece a un país y atiende según un tipo de turno de 1 a 24 horas. Todo se puede editar o eliminar desde aquí.</span></div>
     <div class="fold-bar"><button class="btn sm ghost" type="button" data-fold-all="open">Expandir todo</button><button class="btn sm ghost" type="button" data-fold-all="close">Contraer todo</button></div>
     ${countries.map((c) => { const rows = storeRows(c); const n = all.filter((b) => b.country === c.code).length;
@@ -942,18 +1027,19 @@ function viewIntegraciones() {
 function renderDrawer() {
   if (S.drawer.cust) return customerDrawerHtml(cust(S.drawer.cust));
   const a = S.appts.find((x) => x.id === S.drawer.appt); const c = cust(a.customer), s = svcById(a.service);
-  const acts = can.write() ? TRANSITIONS[a.status] : [];
+  const acts = can.write() ? (a.real ? TRANSITIONS_REAL : TRANSITIONS)[a.status] || [] : [];
   return `<div class="scrim" data-scrim><aside class="drawer" role="dialog" aria-modal="true" aria-label="Detalle de reserva">
     <header><div><span class="eyebrow mono">${a.code}</span><h2>${esc(s.name)}</h2><p class="muted num">${fmtLong(a.date)} · ${hm(a.start)}–${hm(a.end)}</p></div><button class="btn ghost sm" type="button" data-close aria-label="Cerrar">✕</button></header>
     <div class="body">
       <div>${pill(a.status)} <span class="tag">${ORIGIN_LABEL[a.origin]}</span></div>
       <dl class="dl">
-        <dt>Cliente</dt><dd><b>${esc(c.name)}</b></dd>
-        <dt>RUT</dt><dd class="mono">${formatRut(c.rut)}</dd>
-        <dt>Teléfono</dt><dd class="num">${fmtPhone(c.phone)}</dd>
+        <dt>${a.real ? 'Karrier' : 'Cliente'}</dt><dd><b>${esc(c.name)}</b>${a.real ? ` <button type="button" class="btn sm ghost" data-cust="${c.id}">Ver ficha</button>` : ''}</dd>
+        <dt>RUT</dt><dd class="mono">${rutDe(c)}</dd>
+        <dt>Teléfono</dt><dd class="num">${c.phone ? esc(fmtPhone(c.phone)) : '<span class="muted">—</span>'}</dd>
         ${a.plate ? `<dt>Patente</dt><dd><span class="plate">${fmtPlate(a.plate)}</span></dd>` : ''}
-        <dt>Tienda</dt><dd>${esc(BRANCHES[a.branch].name)} <span class="muted">· ${esc(COUNTRIES[BRANCHES[a.branch].country].name)}</span></dd>
-        ${a.notes ? `<dt>Notas</dt><dd>${esc(a.notes)}</dd>` : ''}
+        ${a.real && c.plate ? `<dt>Patente</dt><dd><span class="plate">${esc(validPlate(c.plate) ? fmtPlate(c.plate) : c.plate)}</span></dd>` : ''}
+        ${a.real ? (a.detalle || []).map((x) => `<dt>${esc(x.k)}</dt><dd>${esc(x.v)}</dd>`).join('') : `<dt>Tienda</dt><dd>${esc(BRANCHES[a.branch].name)} <span class="muted">· ${esc(COUNTRIES[BRANCHES[a.branch].country].name)}</span></dd>`}
+        ${a.notes && !a.real ? `<dt>Notas</dt><dd>${esc(a.notes)}</dd>` : ''}
       </dl>
       <div><h3 style="margin-bottom:10px">Historial</h3><div class="timeline">${a.history.map((h) => `<div><span class="num muted">${h.when}</span> · ${esc(h.who)}<br>${esc(h.what)}</div>`).join('')}</div></div>
     </div>
@@ -968,6 +1054,7 @@ function bindDrawer() {
   root.querySelectorAll('.drawer [data-sim]').forEach((b) => b.onclick = () => toast(b.dataset.sim));
   root.querySelectorAll('[data-to]').forEach((b) => b.onclick = () => {
     const a = S.appts.find((x) => x.id === S.drawer.appt); const to = b.dataset.to;
+    if (a.real) { cambiarEstadoReal(a, to); return; }
     a.status = to; a.history.push({ when: `${fmtDate(TODAY)} ${hm(NOW)}`, who: user().name, what: ACTION_LOG[to] });
     if (to === 'CANCELLED') a.history.push({ when: `${fmtDate(TODAY)} ${hm(NOW)}`, who: 'Sistema', what: 'Aviso de cancelación enviado al cliente · cupo liberado' });
     toast(`${a.code}: ${ST_LABEL[to].toLowerCase()}`); render();
@@ -976,8 +1063,19 @@ function bindDrawer() {
 function customerDrawerHtml(c) {
   const hist = S.appts.filter((a) => a.customer === c.id).sort((a, b) => (b.date + pad(b.start)).localeCompare(a.date + pad(a.start)));
   const w = can.write();
+  if (c.ficha) return `<div class="scrim" data-scrim><aside class="drawer" role="dialog" aria-modal="true" aria-label="Ficha del Karrier">
+    <header><div style="min-width:0"><span class="eyebrow">Karrier · ${SOURCE_LABEL[c.source]}</span><h2>${esc(c.name)}</h2><p class="muted mono">${esc(rutDe(c))}</p>
+      <div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap">${cstatusPill(c.status)}${c.tags.map((t) => `<span class="tag">${esc(t)}</span>`).join('')}${c.enAltas ? '' : '<span class="pill st-PENDING">No está en Altas Onboarding</span>'}</div></div>
+      <button class="btn ghost sm" type="button" data-close aria-label="Cerrar">✕</button></header>
+    <div class="body">
+      <dl class="dl">${c.ficha.map((x) => `<dt>${esc(x.k)}</dt><dd>${esc(x.v)}</dd>`).join('')}</dl>
+      <div><h3 style="margin-bottom:8px">Reservas (${hist.length})</h3><div class="list card">${hist.slice(0, 12).map((a) => apptRow(a, true)).join('') || '<p class="empty">Sin reservas.</p>'}</div></div>
+      <p class="muted" style="font-size:.78rem">Datos tomados de Turnos (Karriers) y de Altas Onboarding. Para corregirlos, edítalos en esas secciones del portal.</p>
+    </div>
+    <footer>${w && c.status !== 'BLOCKED' ? `<button class="btn primary" type="button" data-book-for="${c.id}">Tomar turno por el Karrier</button>` : ''}</footer>
+  </aside></div>`;
   return `<div class="scrim" data-scrim><aside class="drawer" role="dialog" aria-modal="true" aria-label="Ficha de cliente">
-    <header><div style="min-width:0"><span class="eyebrow">${c.type === 'COMPANY' ? 'Empresa' : 'Persona'} · ${SOURCE_LABEL[c.source]}</span><h2>${esc(c.name)}</h2><p class="muted mono">${formatRut(c.rut)}</p>
+    <header><div style="min-width:0"><span class="eyebrow">${c.type === 'COMPANY' ? 'Empresa' : 'Persona'} · ${SOURCE_LABEL[c.source]}</span><h2>${esc(c.name)}</h2><p class="muted mono">${rutDe(c)}</p>
       <div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap">${cstatusPill(c.status)}${c.tags.map((t) => `<span class="tag">${esc(t)}</span>`).join('')}</div></div>
       <button class="btn ghost sm" type="button" data-close aria-label="Cerrar">✕</button></header>
     <div class="body">
@@ -1177,7 +1275,7 @@ root.addEventListener('click', (ev) => {
   else if ('fdel' in d) deleteConfig(S.form);
   else if (d.editCountry) { const c = COUNTRIES[d.editCountry]; S.form = { kind: 'country', editId: c.code, errors: {}, values: { name: c.name, code: c.code, tz: c.tz, currency: c.currency } }; render(); }
   else if (d.editShift) { const t = shiftById(d.editShift); S.form = { kind: 'shift', editId: t.id, errors: {}, values: { name: t.name, start: String(t.start), hours: String(t.hours), days: t.days.slice() } }; render(); }
-  else if (d.editCust) { const c = cust(d.editCust); S.form = { kind: 'customer', editId: c.id, errors: {}, values: { type: c.type, status: c.status, name: c.name, rut: formatRut(c.rut), phone: fmtPhone(c.phone), email: c.email, tags: c.tags.join(', '), plate: c.plate || '', notes: c.notes || '', consent: c.consent } }; render(); }
+  else if (d.editCust) { const c = cust(d.editCust); S.form = { kind: 'customer', editId: c.id, errors: {}, values: { type: c.type, status: c.status, name: c.name, rut: rutDe(c), phone: fmtPhone(c.phone), email: c.email, tags: c.tags.join(', '), plate: c.plate || '', notes: c.notes || '', consent: c.consent } }; render(); }
   else if (d.staffToggle) { const u = S.staff.find((x) => x.id === d.staffToggle); if (u.status === 'INVITED') toast(`Invitación reenviada a ${u.email}`); else { u.status = u.status === 'ACTIVE' ? 'DISABLED' : 'ACTIVE'; toast(u.status === 'ACTIVE' ? `${u.name} reactivado` : `${u.name} desactivado: sus sesiones se cerraron`); } render(); }
   else if (d.staffReset) { const u = S.staff.find((x) => x.id === d.staffReset); toast(`Enlace para restablecer la contraseña enviado a ${u.email}`); }
   else if (d.doc) { cust(S.drawer.cust).docs[d.doc] = el.checked; render(); }
@@ -1189,6 +1287,8 @@ root.addEventListener('click', (ev) => {
 
 /* ---- New appointment modal ---- */
 function openNew(pre = {}) {
+  // Con reservas reales, se agenda por el mismo link /turnos (respeta cupos por rol y reglas de Turnos).
+  if (S.real) { S.drawer = null; S.modal = null; S.publicMode = true; render(); toast('Las reservas se toman en el link /turnos con el RUT del Karrier.'); return; }
   const firstCust = S.customers.find((c) => c.status !== 'BLOCKED');
   if (!pre.custId && !firstCust) { toast('Primero crea un cliente en la sección Clientes.'); return; }
   const svcId = pre.svcId || SERVICES[0].id;
@@ -1215,7 +1315,7 @@ function renderModal() {
       <div class="field"><label>Horarios disponibles <span class="muted" style="font-weight:400">(disponibilidad: horario de la tienda + excepciones + capacidad ${storeCap(S.branch)} + holgura de ${svc.buffer} min)</span></label>
         ${slots.length ? `<div class="slots">${slots.map((x) => `<button type="button" class="slot" data-slot="${x.t}" aria-pressed="${x.t === m.t}" title="${x.left} cupo(s) libre(s)">${hm(x.t)}</button>`).join('')}</div>` : `<p class="muted">${holiday(m.date, S.branch) ? 'Feriado: ' + holiday(m.date, S.branch) + '.' : 'Sin horarios disponibles este día.'}</p>`}</div>
       <div class="form-grid">
-        <div class="field"><label for="m-cust">Cliente</label><select id="m-cust" class="input">${S.customers.filter((c) => c.status !== 'BLOCKED').sort((a, b) => a.name.localeCompare(b.name)).map((c) => `<option value="${c.id}" ${c.id === m.custId ? 'selected' : ''}>${esc(c.name)} · ${formatRut(c.rut)}</option>`).join('')}</select></div>
+        <div class="field"><label for="m-cust">Cliente</label><select id="m-cust" class="input">${S.customers.filter((c) => c.status !== 'BLOCKED').sort((a, b) => a.name.localeCompare(b.name)).map((c) => `<option value="${c.id}" ${c.id === m.custId ? 'selected' : ''}>${esc(c.name)} · ${rutDe(c)}</option>`).join('')}</select></div>
         ${svc.plate ? `<div class="field"><label for="m-plate">Patente</label><input id="m-plate" class="input mono" placeholder="${cust(m.custId).plate ? fmtPlate(cust(m.custId).plate) : 'LXJK45'}" value="${esc(m.plate)}"><span class="hint">Vacío usa la patente habitual del cliente.</span></div>` : '<div></div>'}
       </div>
       <div class="field"><label for="m-notes">Notas internas</label><input id="m-notes" class="input" value="${esc(m.notes)}" placeholder="Opcional"></div>
@@ -1290,6 +1390,9 @@ function bindLogin() {
 
 /* ---- Public booking ---- */
 function renderPublic() {
+  // Con reservas reales, la página pública ES el link /turnos.
+  if (S.real) return `<div class="pub-real" style="display:flex;flex-direction:column;height:calc(100vh - ${document.querySelector('.sim-banner').offsetHeight}px)">
+    <iframe src="/turnos" title="Tomar turno (link /turnos)" style="flex:1;width:100%;border:0;display:block"></iframe></div>`;
   const b = S.bk; const branch = BRANCHES[S.branch];
   if (!branch) return `<div class="pub"><header class="pub-head"><div class="in"><div class="brand"><div class="logo">K</div><div><b>Karri</b><span>Reservas</span></div></div><button class="btn" type="button" data-exit>Volver al backoffice</button></div></header>
     <main class="pub-main"><section class="card"><div class="body" style="text-align:center;padding:40px 16px"><h1>Aún no hay tiendas publicadas</h1><p class="muted">Crea una tienda en el backoffice (Países y tiendas) para habilitar la reserva en línea.</p></div></section></main></div>`;
@@ -1350,6 +1453,7 @@ function renderPublic() {
   </div>`;
 }
 function bindPublic() {
+  if (S.real) return;
   const b = S.bk;
   root.querySelector('[data-exit]').onclick = () => { S.publicMode = false; render(); };
   const pbr = document.getElementById('pub-branch'); if (!pbr) return;
@@ -1386,15 +1490,35 @@ function bindPublic() {
 /* =================== Misc =================== */
 function toast(msg) { const t = document.createElement('div'); t.className = 'toast'; t.textContent = msg; document.getElementById('toasts').appendChild(t); setTimeout(() => t.remove(), 3200); }
 const VALID = ['calendario', 'reservas', 'clientes', 'tiendas', 'servicios', 'reportes', 'usuarios', 'integraciones'];
-function fromHash() { const h = location.hash.slice(1); if (h === 'reservar') { S.publicMode = true; } else if (VALID.includes(h)) { S.publicMode = false; S.route = h; S.drawer = null; } render(); }
+function fromHash() {
+  const h = location.hash.slice(1); const eraPublica = S.publicMode;
+  if (h === 'reservar') { S.publicMode = true; } else if (VALID.includes(h)) { S.publicMode = false; S.route = h; S.drawer = null; }
+  render();
+  // Al volver del link /turnos, trae los turnos recién tomados.
+  if (S.real && eraPublica && !S.publicMode) cargarReales();
+}
 window.addEventListener('hashchange', fromHash);
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && (S.drawer || S.modal || S.form)) { if (S.form) S.form = null; else { S.drawer = null; S.modal = null; } render(); } });
-document.getElementById('sim-public').onclick = () => { S.publicMode = !S.publicMode; document.getElementById('sim-public').textContent = S.publicMode ? 'Volver al backoffice' : 'Ver página pública de reservas'; render(); };
+document.getElementById('sim-public').onclick = () => { S.publicMode = !S.publicMode; document.getElementById('sim-public').textContent = S.publicMode ? 'Volver al backoffice' : 'Ver página pública de reservas'; render(); if (S.real && !S.publicMode) cargarReales(); };
 document.getElementById('sim-reset').onclick = () => { boot(true); toast('Datos vaciados. Crea un país, un turno y una tienda para empezar.'); render(); };
 document.getElementById('sim-role').onchange = (e) => { S.role = e.target.value; S.drawer = null; S.loggedIn = true; toast(`Ahora ves la app como ${ROLE_LABELS[S.role]}`); render(); };
-document.getElementById('sim-demo').onclick = () => { boot(false); toast('Datos demo cargados'); render(); };
+document.getElementById('sim-demo').onclick = () => {
+  if (S.real) { boot(false); fromHash(); toast('Datos demo cargados (no son reales)'); }
+  else { S.loading = true; render(); cargarReales({ avisar: true }); }
+};
+document.getElementById('sim-refresh').onclick = () => cargarReales({ avisar: true });
+// Arranca con las reservas reales de Turnos; si la API no responde, cae a la demo.
 boot(false);
+S.loading = true;
 fromHash();
+cargarReales();
+// Refresco automático cada minuto (sin interrumpir si se está escribiendo o con un formulario abierto).
+setInterval(() => {
+  const ae = document.activeElement;
+  if (!S.real || S.publicMode || S.modal || S.form || document.visibilityState !== 'visible') return;
+  if (ae && ['INPUT', 'SELECT', 'TEXTAREA'].includes(ae.tagName)) return;
+  cargarReales();
+}, 60000);
 </script>
 
 

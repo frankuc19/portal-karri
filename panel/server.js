@@ -30,6 +30,7 @@ const campaignsRoutes = require('../src/onboarding/campaignsRoutes');
 const templatesRoutes = require('../src/onboarding/templatesRoutes');
 
 const { publicRouter: turnosPublicRoutes, adminRouter: turnosAdminRoutes } = require('../src/turnos/turnosRoutes');
+const { router: agendaRoutes } = require('../src/agenda/agendaRoutes');
 
 const altasRoutes = require('../src/onboarding/altasRoutes');
 const altasStore  = require('../src/onboarding/altasStore');
@@ -567,6 +568,18 @@ app.use('/api/ob/altas',     requireAuthApi, altasRoutes);
 
 // ─── API: turnos (administración, solo panel) ─────────────────────────────────
 app.use('/api/turnos/admin', requireAuthApi, turnosAdminRoutes);
+
+// ─── API: Agenda (reservas = turnos tomados en /turnos) ───────────────────────
+// Además de sesión, exige el permiso de la sección Agenda.
+function requireSeccionApi(section) {
+  return (req, res, next) => {
+    const s = req.session || {};
+    const sections = s.role === 'admin' ? ALL_SECTIONS : (s.sections || []);
+    if (sections.includes(section)) return next();
+    res.status(403).json({ ok: false, error: 'Tu perfil no tiene acceso a Agenda.' });
+  };
+}
+app.use('/api/agenda', requireAuthApi, requireSeccionApi('agenda'), agendaRoutes);
 
 // ─── API: KPIs (Altas vs Producción) ──────────────────────────────────────────
 app.use('/api/kpis', requireAuthApi, kpisRoutes);

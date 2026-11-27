@@ -980,8 +980,8 @@ module.exports = {
   tomarTurno, cancelarTurno, reasignarTurno, getAuditoria,
   disponibilidadTienda, disponibilidadTiendaCompleta, misTurnos, coberturaTienda, coberturaGeneral, dashboardKpis,
   slotConInfo,
-  getAsistenciaByAssignment, setAsistencia, setAsistenciaHora,
-  observacionesDeAsignacion, addObservacion,
+  getAsistencias, getAsistenciaByAssignment, setAsistencia, setAsistenciaHora,
+  getObservaciones, observacionesDeAsignacion, addObservacion,
   listAsistenciaDia, listBitacora,
   ERRORES,
 };
