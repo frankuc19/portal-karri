@@ -86,7 +86,15 @@
       label: 'Agenda',
       perm:  'agenda',
       items: [
-        { label: 'Karri Agenda', href: '/agenda/index.html', icon: 'calendar-check', key: 'agenda-app' },
+        { label: 'Calendario',        href: '/agenda/index.html#calendario',    icon: 'calendar-check', key: 'agenda-calendario' },
+        { label: 'Reservas',          href: '/agenda/index.html#reservas',      icon: 'list',           key: 'agenda-reservas' },
+        { label: 'Clientes',          href: '/agenda/index.html#clientes',      icon: 'user',           key: 'agenda-clientes' },
+        { label: 'Países y tiendas',  href: '/agenda/index.html#tiendas',       icon: 'map-pin',        key: 'agenda-tiendas' },
+        { label: 'Servicios',         href: '/agenda/index.html#servicios',     icon: 'clipboard-list', key: 'agenda-servicios' },
+        { label: 'Reportes',          href: '/agenda/index.html#reportes',      icon: 'trending-up',    key: 'agenda-reportes' },
+        { label: 'Usuarios',          href: '/agenda/index.html#usuarios',      icon: 'user-cog',       key: 'agenda-usuarios' },
+        { label: 'Integraciones',     href: '/agenda/index.html#integraciones', icon: 'plug',           key: 'agenda-integraciones' },
+        { label: 'Página pública',    href: '/agenda/index.html#reservar',      icon: 'globe',          key: 'agenda-reservar' },
       ],
     },
     {
@@ -234,7 +242,9 @@
     try { collapsed = JSON.parse(localStorage.getItem(collapseKey) || '{}'); } catch {}
 
     function toggleSection(perm) {
-      collapsed[perm] = !collapsed[perm];
+      // Sin valor guardado la sección está cerrada (ver isCollapsed más abajo),
+      // así que el primer clic debe abrirla.
+      collapsed[perm] = !(collapsed[perm] !== false);
       localStorage.setItem(collapseKey, JSON.stringify(collapsed));
       const items   = document.getElementById(`sec-items-${perm}`);
       const chevron = document.getElementById(`sec-chevron-${perm}`);

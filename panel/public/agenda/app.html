@@ -11,6 +11,8 @@ try {
   var _t = localStorage.getItem('karri_theme');
   document.documentElement.setAttribute('data-theme', _t === 'dark' ? 'dark' : 'light');
 } catch (e) { document.documentElement.setAttribute('data-theme', 'light'); }
+/* Dentro del portal (iframe) la navegación la da la barra del portal. */
+if (window.self !== window.top) document.documentElement.classList.add('embed');
 </script>
 <title>Karri Agenda</title>
 <meta name="claude:viewport-fit-sides" content="cover">
@@ -317,12 +319,19 @@ tbody tr.click:hover td { background: var(--surface-2); }
   .checks { grid-template-columns: minmax(0, 1fr); }
   .checks.seven { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 }
+/* Embebido en el portal: sin barra interna; los módulos están en la barra del portal. */
+.embed .side { display: none !important; }
+.embed .app { grid-template-columns: minmax(0, 1fr); }
+.sim-banner label { display: inline-flex; align-items: center; gap: 6px; }
+.sim-banner select { background: transparent; border: 1px solid currentColor; color: inherit; border-radius: 999px; padding: 2px 8px; font-size: .75rem; cursor: pointer; }
+.sim-banner select option { color: #111; background: #fff; }
 </style>
 </head>
 <body>
 <div class="sim-banner" role="note">
   <span><b>Prototipo</b> · Karri Agenda, el reemplazo de AgendaPro. Datos de ejemplo; nada se guarda.</span>
-  <span style="display:flex;gap:8px;flex-wrap:wrap">
+  <span style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+    <label>Probar como <select id="sim-role"></select></label>
     <button type="button" id="sim-public">Ver página pública de reservas</button>
     <button type="button" id="sim-demo">Cargar datos demo</button>
     <button type="button" id="sim-reset">Vaciar datos</button>
@@ -623,7 +632,16 @@ const ALLOWED = {
   VIEWER: ['calendario', 'reservas', 'reportes'],
 };
 
-function render() {
+/* Envoltorio: dibuja y sincroniza el módulo activo con la barra del portal. */
+function render() { renderApp(); syncRoute(); }
+function syncRoute() {
+  const r = S.publicMode ? 'reservar' : S.route;
+  if (location.hash.slice(1) !== r) history.replaceState(null, '', '#' + r);
+  const rs = document.getElementById('sim-role');
+  rs.innerHTML = Object.keys(USERS).map((k) => `<option value="${k}" ${k === S.role ? 'selected' : ''}>${ROLE_LABELS[k]}</option>`).join('');
+  if (window.parent !== window) window.parent.postMessage({ agendaRoute: r }, location.origin);
+}
+function renderApp() {
   document.getElementById('sim-public').textContent = S.publicMode ? 'Volver al backoffice' : 'Ver página pública de reservas';
   if (S.publicMode) { root.innerHTML = renderPublic(); bindPublic(); return; }
   if (!S.loggedIn) { root.innerHTML = renderLogin(); bindLogin(); return; }
@@ -1373,6 +1391,7 @@ window.addEventListener('hashchange', fromHash);
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && (S.drawer || S.modal || S.form)) { if (S.form) S.form = null; else { S.drawer = null; S.modal = null; } render(); } });
 document.getElementById('sim-public').onclick = () => { S.publicMode = !S.publicMode; document.getElementById('sim-public').textContent = S.publicMode ? 'Volver al backoffice' : 'Ver página pública de reservas'; render(); };
 document.getElementById('sim-reset').onclick = () => { boot(true); toast('Datos vaciados. Crea un país, un turno y una tienda para empezar.'); render(); };
+document.getElementById('sim-role').onchange = (e) => { S.role = e.target.value; S.drawer = null; S.loggedIn = true; toast(`Ahora ves la app como ${ROLE_LABELS[S.role]}`); render(); };
 document.getElementById('sim-demo').onclick = () => { boot(false); toast('Datos demo cargados'); render(); };
 boot(false);
 fromHash();

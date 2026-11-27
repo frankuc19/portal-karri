@@ -11,9 +11,9 @@
 <link rel="stylesheet" href="/styles.css">
 <link rel="stylesheet" href="/assets/tailwind.css">
 <style>
-  /* La app de Agenda vive en un iframe que llena el área de contenido del
-     portal. El iframe aísla el CSS/JS de Agenda para que no choque con el
-     chrome del portal (sidebar, tokens, etc.). */
+  /* Los módulos de Agenda se eligen en la barra del portal (#calendario,
+     #reservas, ...). La app vive en un iframe que nunca se recarga al cambiar
+     de módulo, así no se pierde el estado. El iframe aísla su CSS/JS. */
   #agenda-frame { flex: 1 1 auto; width: 100%; border: 0; display: block; }
 </style>
 </head>
@@ -22,12 +22,45 @@
 <aside id="sidebar" class="sidebar"></aside>
 
 <div class="flex-1 flex flex-col overflow-hidden">
-  <iframe id="agenda-frame" src="/agenda/app.html" title="Karri Agenda"></iframe>
+  <iframe id="agenda-frame" title="Karri Agenda"></iframe>
 </div>
 
-<script src="/sidebar.js?v=20261126"></script>
+<script src="/sidebar.js?v=20261127"></script>
 <script>
-  initSidebar('agenda-app').then(() => {
+  const RUTAS = ['calendario', 'reservas', 'clientes', 'tiendas', 'servicios', 'reportes', 'usuarios', 'integraciones', 'reservar'];
+  const frame = document.getElementById('agenda-frame');
+  const rutaActual = () => { const h = location.hash.slice(1); return RUTAS.includes(h) ? h : 'calendario'; };
+
+  function marcarActivo(ruta) {
+    document.querySelectorAll('#sidebar a.nav-item[href^="/agenda/index.html#"]').forEach((a) => {
+      a.classList.toggle('active', a.getAttribute('href') === '/agenda/index.html#' + ruta);
+    });
+  }
+
+  // Primera carga: el iframe abre directo en el módulo pedido.
+  frame.src = '/agenda/app.html#' + rutaActual();
+
+  // Clic en un módulo de la barra del portal: solo cambia el #, sin recargar.
+  window.addEventListener('hashchange', () => {
+    const ruta = rutaActual();
+    marcarActivo(ruta);
+    try { frame.contentWindow.location.hash = ruta; } catch (e) { frame.src = '/agenda/app.html#' + ruta; }
+    const sb = document.getElementById('sidebar');
+    if (sb && sb.classList.contains('sidebar-mobile-open') && window._toggleSidebarPanel) window._toggleSidebarPanel();
+  });
+
+  // La app avisa cuando cambia de módulo por su cuenta (p. ej. por permisos del rol).
+  window.addEventListener('message', (e) => {
+    if (e.origin !== location.origin || !e.data || !RUTAS.includes(e.data.agendaRoute)) return;
+    const ruta = e.data.agendaRoute;
+    if (location.hash.slice(1) !== ruta) history.replaceState(null, '', '#' + ruta);
+    marcarActivo(ruta);
+  });
+
+  initSidebar('agenda-' + rutaActual()).then(() => {
+    // Deja la sección Agenda desplegada para que se vean sus módulos.
+    const items = document.getElementById('sec-items-agenda');
+    if (items && items.style.maxHeight === '0px' && window._sidebarToggle) window._sidebarToggle('agenda');
     if (window.lucide) lucide.createIcons();
   });
 </script>
